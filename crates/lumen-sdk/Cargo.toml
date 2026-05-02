@@ -1,0 +1,29 @@
+[package]
+name = "lumen-sdk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - WASM 에이전트 SDK: 호스트 임포트를 위한 안전한 Rust 래퍼"
+keywords.workspace = true
+categories.workspace = true
+
+# `extern "C"` 호스트 임포트 선언과 메모리 포인터 변환에는 unsafe 가 불가피합니다.
+# 워크스페이스 lint 를 로컬에서 완화하고 모든 unsafe 블록에 SAFETY 주석을 강제합니다.
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"
+
+[features]
+default = []
+# `alloc` 을 켜면 `String`/`Vec` 기반 보조 함수가 노출됩니다. 그러기 위해서는
+# 에이전트 측에서 글로벌 할당자를 등록해야 합니다.
+alloc = []
+

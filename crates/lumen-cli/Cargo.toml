@@ -1,0 +1,38 @@
+[package]
+name = "lumen-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - `lumen` command-line interface"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "lumen"
+path = "src/main.rs"
+
+[dependencies]
+lumen-core.workspace = true
+lumen-capability.workspace = true
+lumen-defense.workspace = true
+lumen-provenance.workspace = true
+lumen-inference.workspace = true
+lumen-zkml.workspace = true
+lumen-agent.workspace = true
+lumen-orchestrator.workspace = true
+clap = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs"] }
+serde = { workspace = true }
+serde_json.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+hex.workspace = true
+rand = { workspace = true }

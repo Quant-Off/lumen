@@ -1,0 +1,17 @@
+# Demo policy file used by `cargo run -p lumen-cli -- run`.
+#
+# Capabilities here are empty - the CLI's `run` subcommand can still execute
+# the agent loop, but tool calls will be rejected by the PolicyEngine until
+# capabilities are populated. This is *intentional*: a fresh deployment must
+# explicitly opt in to every privilege.
+#
+# To exercise tool calls end-to-end, run the `hello_agent` example instead:
+#   cargo run -p lumen-cli --example hello_agent
+
+[agent]
+id = "0102030405060708090a0b0c0d0e0f10"
+
+trusted_issuers = []
+capabilities = []
+
+# Models would be listed here; absence is fine for this demo.

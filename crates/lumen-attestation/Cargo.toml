@@ -1,0 +1,23 @@
+[package]
+name = "lumen-attestation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - Intel TDX 와 AMD SEV-SNP attestation 문서의 와이어 포맷 파서 (cryptographic 검증은 v0.4)"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lumen-core.workspace = true
+serde = { workspace = true }
+thiserror.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+serde_json = { workspace = true }

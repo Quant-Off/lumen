@@ -1,0 +1,25 @@
+[package]
+name = "lumen-defense"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - low-latency prompt-injection / jailbreak detection (Aho-Corasick + RegexSet + heuristics)"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lumen-core.workspace = true
+aho-corasick.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+serde = { workspace = true }
+tracing.workspace = true
+
+[dev-dependencies]
+serde_json = { workspace = true }

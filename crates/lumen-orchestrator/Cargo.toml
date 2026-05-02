@@ -1,0 +1,33 @@
+[package]
+name = "lumen-orchestrator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - multi-agent supervisor with channel-only inter-agent communication"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lumen-core.workspace = true
+lumen-agent.workspace = true
+lumen-channel.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }
+async-trait.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+serde = { workspace = true }
+
+[dev-dependencies]
+lumen-capability.workspace = true
+lumen-defense.workspace = true
+lumen-inference.workspace = true
+lumen-zkml.workspace = true
+serde_json = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

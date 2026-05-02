@@ -1,0 +1,33 @@
+[package]
+name = "lumen-channel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - typed async secure channels (in-process; AES-GCM/x25519 behind feature)"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+crypto-channel = ["dep:aes-gcm", "dep:x25519-dalek"]
+
+[dependencies]
+lumen-core.workspace = true
+lumen-attestation.workspace = true
+async-trait.workspace = true
+tokio = { workspace = true }
+serde = { workspace = true }
+postcard.workspace = true
+thiserror.workspace = true
+rand = { workspace = true }
+aes-gcm = { workspace = true, optional = true }
+x25519-dalek = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

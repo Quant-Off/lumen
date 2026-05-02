@@ -1,0 +1,28 @@
+[package]
+name = "lumen-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - shared identifiers, hashing (BLAKE3), Ed25519 crypto wrappers, errors and time types"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+serde = { workspace = true }
+blake3 = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand_core.workspace = true
+subtle.workspace = true
+hex.workspace = true
+postcard.workspace = true
+
+[dev-dependencies]
+rand = { workspace = true }
+serde_json = { workspace = true }

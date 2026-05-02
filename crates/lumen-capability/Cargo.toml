@@ -1,0 +1,28 @@
+[package]
+name = "lumen-capability"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - capability-based, signed permission tokens with replay-resistant policy enforcement"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lumen-core.workspace = true
+thiserror.workspace = true
+serde = { workspace = true }
+postcard.workspace = true
+globset.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rand = { workspace = true }
+serde_json = { workspace = true }
+toml.workspace = true

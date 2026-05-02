@@ -1,0 +1,28 @@
+[package]
+name = "lumen-fixed"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - deterministic Q-format fixed-point arithmetic and integer quantization"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# `calibration` enables `f32` <-> Q* conversions. The deterministic runtime path
+# (proof-bound math) MUST NOT enable this feature; it is only for offline weight
+# preparation where floats are unavoidable.
+calibration = []
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
