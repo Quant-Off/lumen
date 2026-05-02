@@ -46,9 +46,9 @@ flowchart LR
     style FP fill:#bbf7d0,stroke:#14532d
 ```
 
-도구 선택과 출력 필터링은 *argmax*, *lookup table*, *regex match*와 같은 작은 회로로 표현 가능하므로 ezkl 또는 halo2 클래스 시스템으로 증명 가능합니다. 이렇게 하면 LLM 자체는 비밀로 유지되면서도 $(\text{prompt}, \text{policy}) \mapsto \text{tool\_id}$ 매핑은 외부에서 검증 가능해지고, 정책 우회 시도가 ZKP 차원에서 들통나게 됩니다.
+도구 선택과 출력 필터링은 *argmax*, *lookup table*, *regex match*와 같은 작은 회로로 표현 가능하므로 ezkl 또는 halo2 클래스 시스템으로 증명 가능합니다. 이렇게 하면 LLM 자체는 비밀로 유지되면서도 $`(\text{prompt}, \text{policy}) \mapsto \text{tool\_id}`$ 매핑은 외부에서 검증 가능해지고, 정책 우회 시도가 ZKP 차원에서 들통나게 됩니다.
 
-**현재 구현** 은 `ProvingSystem` trait 위에 `MockCommitmentProver` (BLAKE3 commitment) 와 ezkl/halo2 feature 스텁이 올라가 있으며 실제 회로화는 [v0.3](#로드맵) 에서 진행됩니다. 증명과 커밋먼트의 구분이 핵심입니다. `Verification::ZkVerified`와 `Verification::CommitmentOnly`는 명시적으로 별개 variant 로 분리되어 mock 백엔드가 *절대* "ZK 증명됨" 을 주장할 수 없도록 타입 시스템 차원에서 강제됩니다. Mock 의 `verify` 함수는 witnessless 호출을 명시적으로 거부하고, 별도의 `verify_with_witness` API만 `CommitmentOnly`를 반환할 수 있습니다.
+**현재 구현**은 `ProvingSystem` trait 위에 `MockCommitmentProver` (BLAKE3 commitment) 와 ezkl/halo2 feature 스텁이 올라가 있으며 실제 회로화는 [v0.3](#로드맵) 에서 진행됩니다. 증명과 커밋먼트의 구분이 핵심입니다. `Verification::ZkVerified`와 `Verification::CommitmentOnly`는 명시적으로 별개 variant 로 분리되어 mock 백엔드가 *절대* "ZK 증명됨" 을 주장할 수 없도록 타입 시스템 차원에서 강제됩니다. Mock 의 `verify` 함수는 witnessless 호출을 명시적으로 거부하고, 별도의 `verify_with_witness` API만 `CommitmentOnly`를 반환할 수 있습니다.
 
 ### 권한 분리형 Host-WASM 샌드박스
 
@@ -76,7 +76,7 @@ flowchart LR
 
 모든 호스트 임포트는 `lumen.` 네임스페이스 + Capability 검증을 거칩니다. `lumen_log(level, ptr, len)` 는 Capability 가 불필요하고 audit 로그만 남기지만, `lumen_call_tool(tool_ptr, tool_len, args_ptr, args_len) -> i32` 는 Capability 검증을 통과해야 호스트 측에서 도구가 실행되며 실패 시 $-1$(권한 거부) 또는 $-2$(메모리 오류) 를 반환합니다. WASM 메모리에서 호스트로 들어오는 모든 바이트는 *즉시* 호스트 측 `Vec` 으로 복사되어, 정책 검사와 사용 사이에 게스트가 버퍼를 변경할 수 없도록 (TOCTOU 방지) 보장합니다.
 
-**Capability 모델** 은 Ed25519로 서명된 토큰입니다.
+**Capability 모델**은 Ed25519로 서명된 토큰입니다.
 
 ```rust
 struct Capability {
@@ -103,7 +103,7 @@ enum Resource {
 
 `PolicyEngine::check` 는 4단 검증을 수행합니다. *서명* 은 신뢰된 issuer의 공개키 중 하나로 검증되고, *audience* 는 요청한 agent와 일치해야 하며, *만료* 는 현재 시각보다 미래여야 하고, *리소스* 는 요청한 action과 일치해야 합니다. 네 검증을 모두 통과한 후에야 nonce가 LRU 테이블 (capacity $65{,}536$) 에 기록되어 재사용 시 리플레이로 거부됩니다. 실패한 cap은 nonce테이블을 소진하지 않도록 설계되었습니다.
 
-**Attested Secure Channel** 은 *호스트 <-> WASM* 또는 *호스트 <-> TEE* 통신을 Ed25519 상호 핸드셰이크로 보호합니다. 핸드셰이크 시 양측 모두 *pre-pinned* peer 공개키를 가지고 있어야 하며 (TOFU 없음), 자기 ID와 peer ID와 nonce를 서명한 SignedHello를 교환하고, peer의 hello에서 `marker`, `peer_id`, `my_id`, `signature`를 모두 검증합니다. 이후 모든 데이터 프레임은 $(\text{epoch}, \text{seq})$ 쌍을 포함하여 서명되며, 수신 측은 서명 검증과 함께 epoch가 핸드셰이크 시 합의된 값과 일치하는지, seq가 정확히 다음 기대값과 일치하는지를 확인합니다. skip 거부가 곧 reorder/replay 거부입니다.
+**Attested Secure Channel**은 *호스트 <-> WASM* 또는 *호스트 <-> TEE* 통신을 Ed25519 상호 핸드셰이크로 보호합니다. 핸드셰이크 시 양측 모두 *pre-pinned* peer 공개키를 가지고 있어야 하며 (TOFU 없음), 자기 ID와 peer ID와 nonce를 서명한 SignedHello를 교환하고, peer의 hello에서 `marker`, `peer_id`, `my_id`, `signature`를 모두 검증합니다. 이후 모든 데이터 프레임은 $(\text{epoch}, \text{seq})$ 쌍을 포함하여 서명되며, 수신 측은 서명 검증과 함께 epoch가 핸드셰이크 시 합의된 값과 일치하는지, seq가 정확히 다음 기대값과 일치하는지를 확인합니다. skip 거부가 곧 reorder/replay 거부입니다.
 
 ```text
 HelloFrame  := { marker: "lumen.attested.v1",
@@ -119,7 +119,7 @@ TEE attestation 은 동일한 프레임 형식에 `marker = "lumen.attested-tee.
 
 ZKP의 재현성을 보장하려면 같은 입력이 같은 비트를 산출해야 합니다. 부동소수점은 하드웨어와 컴파일러 의존성으로 비트 차이를 만들기 때문에 **증명-바인딩 경로에서 사용 금지** 입니다.
 
-`lumen-fixed` 크레이트는 두 가지 Q 형식을 제공합니다. **Q16.16** 은 `i32` 위에 구축되어 $\pm 32{,}768$ 범위와 $\approx 1.5 \times 10^{-5}$ 정밀도를 가지며 activation 스코어와 라우팅 가중치에 사용됩니다. **Q8.24**도 `i32` 위에 있지만 $\pm 128$ 범위와 $\approx 6 \times 10^{-8}$ 정밀도로 정규화된 weights와 softmax출력에 사용됩니다. 모든 연산은 saturating arithmetic 이 기본입니다.
+`lumen-fixed` 크레이트는 두 가지 Q 형식을 제공합니다. **Q16.16**은 `i32` 위에 구축되어 $\pm 32{,}768$ 범위와 $\approx 1.5 \times 10^{-5}$ 정밀도를 가지며 activation 스코어와 라우팅 가중치에 사용됩니다. **Q8.24**도 `i32` 위에 있지만 $\pm 128$ 범위와 $\approx 6 \times 10^{-8}$ 정밀도로 정규화된 weights와 softmax출력에 사용됩니다. 모든 연산은 saturating arithmetic 이 기본입니다.
 
 ```rust
 let two = Q16_16::from_i32(2);
@@ -154,7 +154,7 @@ pub enum BlockReason {
 
 **모델 Provenance** (`lumen-provenance`) 는 BLAKE3 전체 파일 해시와 선택적 Ed25519 서명 검증을 수행합니다. Safetensors 헤더는 구조 검증만 거치고 텐서를 인스턴스화하지는 않습니다. ONNX 헤더 검증은 직접 작성한 100여 라인 protobuf 디코더로 수행되며, CycloneDX 1.5 SBOM이 BLAKE3 algorithm과 license 메타데이터를 포함하여 자동 생성됩니다.
 
-ONNX 디코더가 `prost-build` 가 아닌 직접 작성인 데에는 세 가지 이유가 있습니다. 첫째로 적대적 입력에 대한 공격 면적을 최소화 (100 라인은 audit 가능한 분량입니다); 둘째로 `protoc` binary 의존성을 제거하여 빌드 환경을 단순화하고 에어갭 친화성을 확보합니다. 셋째로 모든 varint 경계 검사, deprecated group wire-type 즉시 거부, 미지정 필드의 안전한 skip 을 확보하면서 $\text{MAX\_HEADER\_SCAN\_BYTES} = 16\,\text{MiB}$ 하드 캡까지 적용합니다.
+ONNX 디코더가 `prost-build` 가 아닌 직접 작성인 데에는 세 가지 이유가 있습니다. 첫째로 적대적 입력에 대한 공격 면적을 최소화 (100 라인은 audit 가능한 분량입니다); 둘째로 `protoc` binary 의존성을 제거하여 빌드 환경을 단순화하고 에어갭 친화성을 확보합니다. 셋째로 모든 varint 경계 검사, deprecated group wire-type 즉시 거부, 미지정 필드의 안전한 skip 을 확보하면서 $`\text{MAX\_HEADER\_SCAN\_BYTES} = 16\,\text{MiB}`$ 하드 캡까지 적용합니다.
 
 ```rust
 pub struct OnnxHeader {
