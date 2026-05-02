@@ -17,19 +17,19 @@ categories = ["wasm", "cryptography", "command-line-utilities"]
 
 [workspace.dependencies]
 # In-workspace crates
-lumen-core = { path = "crates/lumen-core", version = "0.2.0" }
-lumen-fixed = { path = "crates/lumen-fixed", version = "0.2.0" }
-lumen-capability = { path = "crates/lumen-capability", version = "0.2.0" }
-lumen-channel = { path = "crates/lumen-channel", version = "0.2.0" }
-lumen-provenance = { path = "crates/lumen-provenance", version = "0.2.0" }
-lumen-defense = { path = "crates/lumen-defense", version = "0.2.0" }
-lumen-zkml = { path = "crates/lumen-zkml", version = "0.2.0" }
-lumen-inference = { path = "crates/lumen-inference", version = "0.2.0" }
-lumen-sandbox = { path = "crates/lumen-sandbox", version = "0.2.0" }
-lumen-agent = { path = "crates/lumen-agent", version = "0.2.0" }
-lumen-orchestrator = { path = "crates/lumen-orchestrator", version = "0.2.0" }
-lumen-sdk = { path = "crates/lumen-sdk", version = "0.2.0" }
-lumen-attestation = { path = "crates/lumen-attestation", version = "0.2.0" }
+lumen-core = { path = "crates/lumen-core", version = "0.3.0" }
+lumen-fixed = { path = "crates/lumen-fixed", version = "0.3.0" }
+lumen-capability = { path = "crates/lumen-capability", version = "0.3.0" }
+lumen-channel = { path = "crates/lumen-channel", version = "0.3.0" }
+lumen-provenance = { path = "crates/lumen-provenance", version = "0.3.0" }
+lumen-defense = { path = "crates/lumen-defense", version = "0.3.0" }
+lumen-zkml = { path = "crates/lumen-zkml", version = "0.3.0" }
+lumen-inference = { path = "crates/lumen-inference", version = "0.3.0" }
+lumen-sandbox = { path = "crates/lumen-sandbox", version = "0.3.0" }
+lumen-agent = { path = "crates/lumen-agent", version = "0.3.0" }
+lumen-orchestrator = { path = "crates/lumen-orchestrator", version = "0.3.0" }
+lumen-sdk = { path = "crates/lumen-sdk", version = "0.3.0" }
+lumen-attestation = { path = "crates/lumen-attestation", version = "0.3.0" }
 
 # Errors / utilities
 thiserror = "1"
