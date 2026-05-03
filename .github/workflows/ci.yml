@@ -13,7 +13,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
-  IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/lumen-ci
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -26,19 +25,23 @@ jobs:
     name: build CI image
     runs-on: ubuntu-latest
     # 후속 잡의 `container.image` 는 `env` context 를 평가할 수 없으므로
-    # 전체 이미지 경로를 outputs 로 노출합니다.
+    # 전체 이미지 경로를 outputs 로 노출합니다. 또한 GHCR 은 레포지토리명에
+    # 소문자만 허용하므로 owner 를 소문자화합니다.
     outputs:
       image: ${{ steps.meta.outputs.image }}
+      image_latest: ${{ steps.meta.outputs.image_latest }}
     steps:
       - uses: actions/checkout@v4
 
       - name: compute image tag
         id: meta
         run: |
+          OWNER=$(printf '%s' "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO="ghcr.io/${OWNER}/lumen-ci"
           TAG=$(cat .github/docker/Dockerfile.ci rust-toolchain.toml | sha256sum | cut -c1-16)
-          IMAGE="${IMAGE_REPO}:${TAG}"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "이미지: ${IMAGE}"
+          echo "image=${REPO}:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_latest=${REPO}:latest" >> "$GITHUB_OUTPUT"
+          echo "이미지: ${REPO}:${TAG}"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -56,7 +59,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}
-            ${{ env.IMAGE_REPO }}:latest
+            ${{ steps.meta.outputs.image_latest }}
           cache-from: type=gha,scope=lumen-ci
           cache-to: type=gha,scope=lumen-ci,mode=max
 
