@@ -25,8 +25,10 @@ jobs:
   image:
     name: build CI image
     runs-on: ubuntu-latest
+    # 후속 잡의 `container.image` 는 `env` context 를 평가할 수 없으므로
+    # 전체 이미지 경로를 outputs 로 노출합니다.
     outputs:
-      tag: ${{ steps.meta.outputs.tag }}
+      image: ${{ steps.meta.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,8 +36,9 @@ jobs:
         id: meta
         run: |
           TAG=$(cat .github/docker/Dockerfile.ci rust-toolchain.toml | sha256sum | cut -c1-16)
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "이미지 태그: $IMAGE_REPO:$TAG"
+          IMAGE="${IMAGE_REPO}:${TAG}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "이미지: ${IMAGE}"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -52,7 +55,7 @@ jobs:
           file: .github/docker/Dockerfile.ci
           push: true
           tags: |
-            ${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}
             ${{ env.IMAGE_REPO }}:latest
           cache-from: type=gha,scope=lumen-ci
           cache-to: type=gha,scope=lumen-ci,mode=max
@@ -65,7 +68,7 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      image: ${{ needs.image.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -113,7 +116,7 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      image: ${{ needs.image.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -135,7 +138,7 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      image: ${{ needs.image.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -153,7 +156,7 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      image: ${{ needs.image.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -172,7 +175,7 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      image: ${{ needs.image.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -188,7 +191,7 @@ jobs:
     needs: image
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      image: ${{ needs.image.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
