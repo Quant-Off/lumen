@@ -5,25 +5,72 @@ on:
     branches: [master]
   pull_request:
 
+# 워크플로우 전체에서 GHCR push (image 잡) 와 pull (다른 잡) 권한이 필요합니다.
+permissions:
+  contents: read
+  packages: write
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/lumen-ci
 
 jobs:
-  build-test:
-    name: build & test (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  # ---------------------------------------------------------------------------
+  # CI 베이스 이미지: Dockerfile.ci + rust-toolchain.toml 의 해시를 태그로 사용해
+  # 입력이 변하지 않으면 BuildKit GHA 캐시로 재빌드 없이 그대로 재사용합니다.
+  # 모든 후속 잡이 이 이미지(`needs: image`)를 컨테이너로 받아 동일 환경에서
+  # 실행됩니다 — local Docker 와 CI 동작이 비트 단위로 일치합니다.
+  # ---------------------------------------------------------------------------
+  image:
+    name: build CI image
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+
+      - name: compute image tag
+        id: meta
+        run: |
+          TAG=$(cat .github/docker/Dockerfile.ci rust-toolchain.toml | sha256sum | cut -c1-16)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "이미지 태그: $IMAGE_REPO:$TAG"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
         with:
-          components: clippy, rustfmt
-          targets: wasm32-unknown-unknown
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: build & push CI image
+        uses: docker/build-push-action@v6
+        with:
+          context: .github/docker
+          file: .github/docker/Dockerfile.ci
+          push: true
+          tags: |
+            ${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
+            ${{ env.IMAGE_REPO }}:latest
+          cache-from: type=gha,scope=lumen-ci
+          cache-to: type=gha,scope=lumen-ci,mode=max
+
+  # ---------------------------------------------------------------------------
+  # 빌드 + 테스트 (Linux 컨테이너).
+  # ---------------------------------------------------------------------------
+  build-test:
+    name: build & test (linux)
+    needs: image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - name: cargo build
         run: cargo build --workspace --all-targets --locked
@@ -32,19 +79,47 @@ jobs:
       - name: cargo build (no default features)
         run: cargo build --workspace --no-default-features --locked
       - name: build wasm32 echo-agent
-        run: |
-          cd agents/echo-agent
-          cargo build --release --target wasm32-unknown-unknown --locked
+        working-directory: agents/echo-agent
+        run: cargo build --release --target wasm32-unknown-unknown --locked
 
-  features:
-    name: optional features (halo2, candle)
-    runs-on: ubuntu-latest
+  # ---------------------------------------------------------------------------
+  # 빌드 + 테스트 (macOS native).
+  # macOS 는 Linux 컨테이너를 지원하지 않으므로 별도 native runner 에서
+  # 동일한 toolchain (`rust-toolchain.toml` 이 강제) 으로 검증합니다.
+  # ---------------------------------------------------------------------------
+  build-test-macos:
+    name: build & test (macos)
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: install protoc
+        run: brew install protobuf
       - uses: Swatinem/rust-cache@v2
-      - name: install protoc (candle 의존성)
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: cargo build
+        run: cargo build --workspace --all-targets --locked
+      - name: cargo test
+        run: cargo test --workspace --locked
+      - name: cargo build (no default features)
+        run: cargo build --workspace --no-default-features --locked
+      - name: build wasm32 echo-agent
+        working-directory: agents/echo-agent
+        run: cargo build --release --target wasm32-unknown-unknown --locked
+
+  # ---------------------------------------------------------------------------
+  # 무거운 optional features (halo2, candle).
+  # ---------------------------------------------------------------------------
+  features:
+    name: optional features (halo2, candle)
+    needs: image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
       - name: cargo build --features halo2
         run: cargo build -p lumen-zkml --features halo2 --locked
       - name: cargo test --features halo2
@@ -52,47 +127,71 @@ jobs:
       - name: cargo build --features candle
         run: cargo build -p lumen-inference --features candle --locked
 
+  # ---------------------------------------------------------------------------
+  # Lint: clippy + rustfmt.
+  # ---------------------------------------------------------------------------
   lint:
     name: clippy & fmt
+    needs: image
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
+  # ---------------------------------------------------------------------------
+  # Rustdoc: 깨진 intra-doc link 거부.
+  # ---------------------------------------------------------------------------
   docs:
     name: cargo doc
+    needs: image
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      RUSTDOCFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo doc
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps --document-private-items
+      - run: cargo doc --workspace --no-deps --document-private-items
 
+  # ---------------------------------------------------------------------------
+  # Supply-chain: license/banned/yanked check (cargo-deny 는 이미지에 사전 설치).
+  # ---------------------------------------------------------------------------
   deny:
     name: cargo deny
+    needs: image
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v1
-        with:
-          command: check
+      - run: cargo deny check
 
+  # ---------------------------------------------------------------------------
+  # RustSec advisory audit (cargo-audit 는 이미지에 사전 설치).
+  # ---------------------------------------------------------------------------
   audit:
     name: cargo audit
+    needs: image
     runs-on: ubuntu-latest
+    container:
+      image: ${{ env.IMAGE_REPO }}:${{ needs.image.outputs.tag }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: install cargo-audit
-        run: cargo install --locked cargo-audit || true
-      - name: cargo audit
-        run: cargo audit
+      - run: cargo audit

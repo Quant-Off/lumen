@@ -1,4 +1,7 @@
 [toolchain]
-channel = "stable"
+# Lumen CI 와 동일한 toolchain 으로 로컬 개발 환경을 강제 동기화합니다.
+# 변경 시 .github/docker/Dockerfile.ci 의 `FROM rust:<X.Y>-bookworm` 도 함께 갱신.
+channel = "1.93.0"
 components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]
 profile = "minimal"

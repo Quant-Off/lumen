@@ -180,7 +180,9 @@ impl<C: SecureChannel> AttestedChannel<C> {
             ));
         }
         if peer.hello.peer_id != my_vk {
-            return Err(Error::Crypto("attested: peer hello 의 수신자가 우리 ID 가 아님".into()));
+            return Err(Error::Crypto(
+                "attested: peer hello 의 수신자가 우리 ID 가 아님".into(),
+            ));
         }
         let peer_bytes = postcard::to_allocvec(&peer.hello)
             .map_err(|e| Error::Decode(format!("peer hello: {e}")))?;
@@ -188,11 +190,10 @@ impl<C: SecureChannel> AttestedChannel<C> {
 
         // TEE 변종: peer attestation 문서 형식 + measurement 핀 검증.
         if marker == TEE_HELLO_MARKER {
-            let bytes = peer
-                .hello
-                .attestation_doc
-                .as_ref()
-                .ok_or_else(|| Error::Crypto("attested-tee: peer 가 attestation 미첨부".into()))?;
+            let bytes =
+                peer.hello.attestation_doc.as_ref().ok_or_else(|| {
+                    Error::Crypto("attested-tee: peer 가 attestation 미첨부".into())
+                })?;
             let doc = lumen_attestation::AttestationDoc::parse(bytes)
                 .map_err(|e| Error::Crypto(format!("attested-tee: {e}")))?;
             if let Some(expected) = expected_peer_measurement {

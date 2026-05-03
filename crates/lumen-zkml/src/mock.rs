@@ -104,8 +104,9 @@ where
         // - 정도만 확인할 수 있습니다. 이 차이를 분명히 하기 위해 PI-only
         // 다이제스트를 계산한 뒤 일치 여부에 따라 항상
         // `CommitmentOnly`/`Invalid` 를 반환합니다.
+        // 실제 검증에는 여전히 witness 가 필요합니다.
         let pi_only = MockCommitmentProver::bind(&vk.circuit_id, public, &EmptyWitness)?;
-        let _ = pi_only; // 실제 검증에는 여전히 witness 가 필요합니다.
+        let _ = pi_only;
         // witness 가 없으면 원본 다이제스트를 재계산할 수 없으므로 여기서는
         // `Invalid` 를 반환합니다. 에이전트 런타임은 witness 가 손에 있을 때
         // `verify_with_witness` (아래 확장 trait) 를 호출해야 합니다. 진짜

@@ -6,7 +6,7 @@
 //! 선택적 AEAD 암호화. 이 크레이트가 제공하는 것:
 //!
 //! - [`SecureChannel`] - 모든 transport 가 구현하는 trait.
-//! - [`InProcChannel`] - tokio mpsc 기반 in-process 채널 (오케스트레이터와
+//! - [`inproc::InProcChannel`] - tokio mpsc 기반 in-process 채널 (오케스트레이터와
 //!   단위 테스트가 사용). 항상 사용 가능.
 //! - `attested` - software-attested 변종 (Ed25519 상호 핸드셰이크 + 서명된
 //!   프레임). TEE 변종은 [`lumen_attestation`] 와 통합.

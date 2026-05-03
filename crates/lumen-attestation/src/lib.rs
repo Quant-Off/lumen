@@ -21,8 +21,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-pub mod tdx;
 pub mod sev_snp;
+pub mod tdx;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

@@ -65,10 +65,7 @@ macro_rules! binary_id {
         }
 
         impl Serialize for $name {
-            fn serialize<S: Serializer>(
-                &self,
-                ser: S,
-            ) -> std::result::Result<S::Ok, S::Error> {
+            fn serialize<S: Serializer>(&self, ser: S) -> std::result::Result<S::Ok, S::Error> {
                 if ser.is_human_readable() {
                     ser.serialize_str(&self.to_hex())
                 } else {
@@ -78,9 +75,7 @@ macro_rules! binary_id {
         }
 
         impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D: Deserializer<'de>>(
-                de: D,
-            ) -> std::result::Result<Self, D::Error> {
+            fn deserialize<D: Deserializer<'de>>(de: D) -> std::result::Result<Self, D::Error> {
                 if de.is_human_readable() {
                     let s = String::deserialize(de)?;
                     Self::from_str(&s).map_err(serde::de::Error::custom)
@@ -128,9 +123,7 @@ impl ToolId {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.')
         {
-            return Err(Error::Invalid(
-                "tool id must match [A-Za-z0-9_.-]+".into(),
-            ));
+            return Err(Error::Invalid("tool id must match [A-Za-z0-9_.-]+".into()));
         }
         Ok(Self(s))
     }

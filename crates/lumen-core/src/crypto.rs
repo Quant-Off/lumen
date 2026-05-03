@@ -114,8 +114,7 @@ impl<'de> Deserialize<'de> for VerifyingKey {
         if de.is_human_readable() {
             let s = String::deserialize(de)?;
             let mut out = [0u8; 32];
-            hex::decode_to_slice(s.trim(), &mut out)
-                .map_err(serde::de::Error::custom)?;
+            hex::decode_to_slice(s.trim(), &mut out).map_err(serde::de::Error::custom)?;
             Self::from_bytes(&out).map_err(serde::de::Error::custom)
         } else {
             let bytes = <Vec<u8>>::deserialize(de)?;
@@ -176,8 +175,7 @@ impl<'de> Deserialize<'de> for Signature {
         if de.is_human_readable() {
             let s = String::deserialize(de)?;
             let mut out = [0u8; SIGNATURE_LENGTH];
-            hex::decode_to_slice(s.trim(), &mut out)
-                .map_err(serde::de::Error::custom)?;
+            hex::decode_to_slice(s.trim(), &mut out).map_err(serde::de::Error::custom)?;
             Ok(Self::from_bytes(&out))
         } else {
             let bytes = <Vec<u8>>::deserialize(de)?;

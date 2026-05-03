@@ -28,7 +28,8 @@ fn echo_agent_wasm_path() -> PathBuf {
     // CARGO_MANIFEST_DIR = crates/lumen-sandbox
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir.parent().unwrap().parent().unwrap();
-    workspace_root.join("agents/echo-agent/target/wasm32-unknown-unknown/release/lumen_echo_agent.wasm")
+    workspace_root
+        .join("agents/echo-agent/target/wasm32-unknown-unknown/release/lumen_echo_agent.wasm")
 }
 
 #[tokio::test]
@@ -114,7 +115,10 @@ async fn echo_agent_with_capability_authorised() {
     let calls = after.tool_calls.lock();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].tool, "echo");
-    assert!(calls[0].authorised, "capability 가 있는 호출은 통과해야 합니다");
+    assert!(
+        calls[0].authorised,
+        "capability 가 있는 호출은 통과해야 합니다"
+    );
 
     let audit = after.audit.lock();
     let joined: String = audit.join(" | ");

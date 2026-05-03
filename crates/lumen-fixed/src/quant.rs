@@ -34,7 +34,11 @@ pub fn quantize_i8(values: &[Q16_16], params: &QuantParams) -> Vec<i8> {
         let s_raw = i64::from(inv_scale_raw);
         // (a + s/2) 의 signed division 으로 round-half-to-even 흉내.
         let half = s_raw / 2;
-        let numerator = if v_raw >= 0 { v_raw + half } else { v_raw - half };
+        let numerator = if v_raw >= 0 {
+            v_raw + half
+        } else {
+            v_raw - half
+        };
         let q = numerator / s_raw;
         let q = q.saturating_add(i64::from(params.zero_point));
         let clamped = q.clamp(i8::MIN as i64, i8::MAX as i64) as i8;

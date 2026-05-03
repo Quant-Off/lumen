@@ -70,13 +70,14 @@ pub fn run(args: Args) -> anyhow::Result<()> {
 }
 
 fn emit(args: EmitArgs) -> anyhow::Result<()> {
-    let chain: Chain = args
-        .chain
-        .parse()
-        .map_err(|e: String| anyhow::anyhow!(e))?;
+    let chain: Chain = args.chain.parse().map_err(|e: String| anyhow::anyhow!(e))?;
     let meta = VerifierMeta::for_circuit(&args.circuit_id);
     let out = emit_artifacts(chain, &meta, &args.out)?;
-    println!("emitted {} files to {}", out.files.len(), out.out_dir.display());
+    println!(
+        "emitted {} files to {}",
+        out.files.len(),
+        out.out_dir.display()
+    );
     for p in &out.files {
         println!("  {}", p.display());
     }
@@ -84,10 +85,7 @@ fn emit(args: EmitArgs) -> anyhow::Result<()> {
 }
 
 fn deploy(args: DeployArgs) -> anyhow::Result<()> {
-    let chain: Chain = args
-        .chain
-        .parse()
-        .map_err(|e: String| anyhow::anyhow!(e))?;
+    let chain: Chain = args.chain.parse().map_err(|e: String| anyhow::anyhow!(e))?;
     match chain {
         Chain::Evm => {
             let pk = std::env::var(&args.privkey_env).unwrap_or_default();

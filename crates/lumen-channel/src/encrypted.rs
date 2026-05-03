@@ -164,10 +164,14 @@ impl<C: SecureChannel> EncryptedChannel<C> {
             )));
         }
         if peer.hello.my_id != peer_vk {
-            return Err(Error::Crypto("encrypted: peer claimed wrong identity".into()));
+            return Err(Error::Crypto(
+                "encrypted: peer claimed wrong identity".into(),
+            ));
         }
         if peer.hello.peer_id != my_vk {
-            return Err(Error::Crypto("encrypted: peer hello not addressed to us".into()));
+            return Err(Error::Crypto(
+                "encrypted: peer hello not addressed to us".into(),
+            ));
         }
         if peer.hello.epoch != epoch {
             return Err(Error::Crypto(format!(
@@ -273,8 +277,8 @@ impl<C: SecureChannel> SecureChannel for EncryptedChannel<C> {
 }
 
 fn signing_payload(hello: &EncryptedHello) -> Result<Vec<u8>> {
-    let body = postcard::to_allocvec(hello)
-        .map_err(|e| Error::Decode(format!("encrypted hello: {e}")))?;
+    let body =
+        postcard::to_allocvec(hello).map_err(|e| Error::Decode(format!("encrypted hello: {e}")))?;
     let mut out = Vec::with_capacity(KEX_SIGN_DOMAIN.len() + body.len());
     out.extend_from_slice(KEX_SIGN_DOMAIN);
     out.extend_from_slice(&body);

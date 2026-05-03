@@ -135,8 +135,7 @@ impl syn::parse::Parse for Punct {
         if input.is_empty() {
             return Ok(Self { name, version });
         }
-        let metas =
-            syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated(input)?;
+        let metas = syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated(input)?;
         for meta in metas {
             match meta {
                 Meta::NameValue(nv) => {

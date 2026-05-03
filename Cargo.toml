@@ -6,7 +6,7 @@ exclude = ["agents/*"]
 [workspace.package]
 version = "0.4.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.85"
 license = "Apache-2.0 OR MIT"
 authors = ["Q. T. Felix <qtfelix@qu4nt.space>"]
 repository = "https://github.com/Quant-Off/lumen"

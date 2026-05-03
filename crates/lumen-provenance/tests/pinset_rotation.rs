@@ -90,14 +90,9 @@ fn rotated_old_file_accepted_during_grace() {
     }
 
     // grace 이후 v1 은 거부.
-    let err = verify_model_against_pinset(
-        &v1,
-        &manifest,
-        &pinset,
-        Timestamp::from_millis(70_000),
-        &[],
-    )
-    .unwrap_err();
+    let err =
+        verify_model_against_pinset(&v1, &manifest, &pinset, Timestamp::from_millis(70_000), &[])
+            .unwrap_err();
     assert!(err.to_string().contains("pinset rejected"), "got: {err}");
 }
 

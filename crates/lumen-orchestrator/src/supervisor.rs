@@ -585,8 +585,9 @@ mod tests {
     async fn send_to_denied_when_policy_attached() {
         let sk = SigningKey::generate(&mut OsRng);
         let policy = Arc::new(PolicyEngine::new(vec![sk.verifying_key()]));
-        let orch =
-            Orchestrator::with_policy(MessagePolicy::with_now(policy, || Timestamp::from_millis(0)));
+        let orch = Orchestrator::with_policy(MessagePolicy::with_now(policy, || {
+            Timestamp::from_millis(0)
+        }));
         let (a_id, a_rt) = build_runtime([1; 16]);
         let (b_id, b_rt) = build_runtime([2; 16]);
         let h_a = orch
@@ -611,10 +612,9 @@ mod tests {
     async fn send_to_authorized_with_valid_capability_succeeds() {
         let sk = SigningKey::generate(&mut OsRng);
         let policy_engine = Arc::new(PolicyEngine::new(vec![sk.verifying_key()]));
-        let orch = Orchestrator::with_policy(MessagePolicy::with_now(
-            policy_engine,
-            || Timestamp::from_millis(0),
-        ));
+        let orch = Orchestrator::with_policy(MessagePolicy::with_now(policy_engine, || {
+            Timestamp::from_millis(0)
+        }));
         let (a_id, a_rt) = build_runtime([1; 16]);
         let (b_id, b_rt) = build_runtime([2; 16]);
         let h_a = orch
@@ -657,10 +657,9 @@ mod tests {
     async fn send_to_authorized_wrong_recipient_rejected() {
         let sk = SigningKey::generate(&mut OsRng);
         let policy_engine = Arc::new(PolicyEngine::new(vec![sk.verifying_key()]));
-        let orch = Orchestrator::with_policy(MessagePolicy::with_now(
-            policy_engine,
-            || Timestamp::from_millis(0),
-        ));
+        let orch = Orchestrator::with_policy(MessagePolicy::with_now(policy_engine, || {
+            Timestamp::from_millis(0)
+        }));
         let (a_id, a_rt) = build_runtime([1; 16]);
         let (b_id, b_rt) = build_runtime([2; 16]);
         let (c_id, c_rt) = build_runtime([3; 16]);
@@ -708,10 +707,9 @@ mod tests {
     async fn send_to_authorized_capability_replay_rejected() {
         let sk = SigningKey::generate(&mut OsRng);
         let policy_engine = Arc::new(PolicyEngine::new(vec![sk.verifying_key()]));
-        let orch = Orchestrator::with_policy(MessagePolicy::with_now(
-            policy_engine,
-            || Timestamp::from_millis(0),
-        ));
+        let orch = Orchestrator::with_policy(MessagePolicy::with_now(policy_engine, || {
+            Timestamp::from_millis(0)
+        }));
         let (a_id, a_rt) = build_runtime([1; 16]);
         let (b_id, b_rt) = build_runtime([2; 16]);
         let h_a = orch

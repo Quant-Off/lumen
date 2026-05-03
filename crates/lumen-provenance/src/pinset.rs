@@ -205,7 +205,10 @@ mod tests {
             hash: h(0xAA),
             version: Some("v1".into()),
         });
-        assert_eq!(p.verify(&h(0xAA), Timestamp::from_millis(0)), PinAcceptance::Current);
+        assert_eq!(
+            p.verify(&h(0xAA), Timestamp::from_millis(0)),
+            PinAcceptance::Current
+        );
     }
 
     #[test]
@@ -235,7 +238,10 @@ mod tests {
             60_000, // 60s grace
         );
         // 새 모델은 항상 OK.
-        assert_eq!(p.verify(&h(0xBB), Timestamp::from_millis(1_500)), PinAcceptance::Current);
+        assert_eq!(
+            p.verify(&h(0xBB), Timestamp::from_millis(1_500)),
+            PinAcceptance::Current
+        );
         // 이전 모델은 grace 안에서 OK.
         match p.verify(&h(0xAA), Timestamp::from_millis(1_500)) {
             PinAcceptance::Grace { expires_at } => {
@@ -301,7 +307,10 @@ mod tests {
             other => panic!("expected Grace, got {other:?}"),
         }
         // v3 는 current.
-        assert_eq!(p.verify(&h(0x03), Timestamp::from_millis(20_000)), PinAcceptance::Current);
+        assert_eq!(
+            p.verify(&h(0x03), Timestamp::from_millis(20_000)),
+            PinAcceptance::Current
+        );
     }
 
     #[test]

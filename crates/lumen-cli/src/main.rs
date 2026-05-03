@@ -11,7 +11,11 @@ mod policy_file;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "lumen", version, about = "Lumen - 보안 검증 가능 AI 에이전트 런타임")]
+#[command(
+    name = "lumen",
+    version,
+    about = "Lumen - 보안 검증 가능 AI 에이전트 런타임"
+)]
 struct Cli {
     /// 서브커맨드.
     #[command(subcommand)]

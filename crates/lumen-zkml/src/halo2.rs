@@ -40,8 +40,8 @@ use halo2_proofs::{
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error as Halo2Error, Instance, Selector},
     poly::Rotation,
 };
-use pasta_curves::pallas::Base as Fp;
 use lumen_core::{Error, Result};
+use pasta_curves::pallas::Base as Fp;
 use serde::{Deserialize, Serialize};
 
 use crate::{ProvingSystem, Verification};

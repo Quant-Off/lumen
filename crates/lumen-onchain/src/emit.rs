@@ -24,7 +24,11 @@ pub struct EmittedArtifacts {
 /// `chain` 에 맞는 verifier 산출물을 `out_dir` 아래에 작성합니다.
 ///
 /// 디렉토리는 없으면 생성합니다. 기존 파일은 *덮어쓰기* 합니다 (재현 빌드).
-pub fn emit_artifacts(chain: Chain, meta: &VerifierMeta, out_dir: &Path) -> Result<EmittedArtifacts> {
+pub fn emit_artifacts(
+    chain: Chain,
+    meta: &VerifierMeta,
+    out_dir: &Path,
+) -> Result<EmittedArtifacts> {
     fs::create_dir_all(out_dir)?;
     let mut files = Vec::new();
 

@@ -12,7 +12,7 @@
 //!
 //! `alloc` 의존성이 없으므로 글로벌 할당자가 없는 가장 미니멀한 wasm 에이전트도
 //! 빌드할 수 있습니다. 동적 문자열 조립이 필요한 경우 `alloc` feature 를
-//! 켜고 [`announce`] 같은 보조 함수를 사용하세요.
+//! 켜고 `alloc_helpers::announce` 같은 보조 함수를 사용하세요.
 //!
 //! 비-`wasm32` 타겟에서도 컴파일은 되지만 (그래야 `cargo check` 등이 다른
 //! 타겟에서 동작합니다) 실제 호스트 호출 부분은 `panic!` 합니다 - SDK 의 호출
@@ -70,12 +70,7 @@ unsafe fn lumen_log(_level: i32, _ptr: i32, _len: i32) {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-unsafe fn lumen_call_tool(
-    _tool_ptr: i32,
-    _tool_len: i32,
-    _args_ptr: i32,
-    _args_len: i32,
-) -> i32 {
+unsafe fn lumen_call_tool(_tool_ptr: i32, _tool_len: i32, _args_ptr: i32, _args_len: i32) -> i32 {
     panic!("lumen-sdk: 호스트 임포트는 wasm32-unknown-unknown 외부에서 호출할 수 없습니다");
 }
 
