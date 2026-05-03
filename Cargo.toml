@@ -66,7 +66,9 @@ globset = "0.4"
 parking_lot = "0.12"
 
 # WASM (sandbox)
-wasmtime = { version = "25", default-features = false, features = ["async", "cranelift", "runtime", "addr2line", "demangle"] }
+# v25 → 최신 line. RUSTSEC 다수 advisory (fd_renumber / wasi:http fields /
+# 컴포넌트 model flags lift / Winch table.fill / UTF-16 transcoding panic) 패치 포함.
+wasmtime = { version = "44", default-features = false, features = ["async", "cranelift", "runtime", "addr2line", "demangle"] }
 wat = "1"
 
 # Provenance

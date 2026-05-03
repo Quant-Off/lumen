@@ -12,8 +12,6 @@ pub struct SandboxConfig {
     pub memory_pages: u32,
     /// 스택 크기 (바이트).
     pub stack_size_bytes: usize,
-    /// 비동기 지원 활성화 여부 (tokio 통합을 위해 기본 `true`).
-    pub async_support: bool,
 }
 
 impl Default for SandboxConfig {
@@ -22,7 +20,6 @@ impl Default for SandboxConfig {
             fuel: 10_000_000,
             memory_pages: 256, // 16 MiB
             stack_size_bytes: 512 * 1024,
-            async_support: true,
         }
     }
 }
@@ -38,10 +35,12 @@ impl SandboxConfig {
     /// - NaN canonicalisation on
     /// - Fuel + epoch interruption 활성으로 hard CPU 한도
     pub fn deterministic_engine(&self) -> Result<Engine> {
+        // wasmtime 44 부터 async 지원은 `async` 크레이트 feature 만으로 결정되며
+        // 런타임 토글이 사라졌습니다 — 우리는 워크스페이스 의존성에서
+        // `async` feature 를 항상 활성화하므로 별도 설정이 필요 없습니다.
         let mut config = Config::new();
         config.consume_fuel(true);
         config.epoch_interruption(true);
-        config.async_support(self.async_support);
         // 결정성: SIMD 가 cross-vendor float drift 의 주요 원인입니다.
         config.wasm_simd(false);
         config.wasm_relaxed_simd(false);
