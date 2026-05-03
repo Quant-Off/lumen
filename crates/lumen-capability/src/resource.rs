@@ -3,7 +3,7 @@
 use std::fmt;
 
 use globset::{Glob, GlobMatcher};
-use lumen_core::ToolId;
+use lumen_core::{AgentId, ToolId};
 use serde::{Deserialize, Serialize};
 
 /// 경로 glob 패턴 (예: `/var/data/**/*.parquet`).
@@ -109,6 +109,12 @@ pub enum Resource {
     },
     /// ZK 증명 생성 요청.
     ZkProofRequest,
+    /// 다른 에이전트에게 인터-에이전트 메시지 송신.
+    ///
+    /// 정책으로 통신 권한을 제어합니다 - capability 가 발급된 수신자에게만
+    /// 페이로드 전달이 허용됩니다. 멀티 에이전트 협업에서 정보 격벽을
+    /// 강제하는 데 사용합니다.
+    AgentMessage(AgentId),
 }
 
 #[cfg(test)]

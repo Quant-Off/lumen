@@ -24,6 +24,14 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+/// `#[lumen_agent]` proc-macro - `macros` feature 활성화 시 노출됩니다.
+///
+/// 사용자 함수 (`fn step()` 또는 `fn step() -> Result<_, _>`) 위에 attribute
+/// 로 붙이면 `_start` ABI 진입점이 자동 생성됩니다. 자세한 옵션은
+/// [`lumen_sdk_macros::lumen_agent`] 참고.
+#[cfg(feature = "macros")]
+pub use lumen_sdk_macros::lumen_agent;
+
 /// 호스트 audit 로그의 레벨.
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -4,32 +4,34 @@ members = ["crates/*"]
 exclude = ["agents/*"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.82"
 license = "Apache-2.0 OR MIT"
-authors = ["Lumen contributors"]
-repository = "https://github.com/qtfelix/lumen"
-homepage = "https://github.com/qtfelix/lumen"
+authors = ["Q. T. Felix <qtfelix@qu4nt.space>"]
+repository = "https://github.com/Quant-Off/lumen"
+homepage = "https://github.com/Quant-Off/lumen"
 description = "High-security verifiable Rust AI-agent framework for zero-trust / air-gapped environments"
 keywords = ["ai", "agent", "security", "wasm", "zkml"]
 categories = ["wasm", "cryptography", "command-line-utilities"]
 
 [workspace.dependencies]
 # In-workspace crates
-lumen-core = { path = "crates/lumen-core", version = "0.3.0" }
-lumen-fixed = { path = "crates/lumen-fixed", version = "0.3.0" }
-lumen-capability = { path = "crates/lumen-capability", version = "0.3.0" }
-lumen-channel = { path = "crates/lumen-channel", version = "0.3.0" }
-lumen-provenance = { path = "crates/lumen-provenance", version = "0.3.0" }
-lumen-defense = { path = "crates/lumen-defense", version = "0.3.0" }
-lumen-zkml = { path = "crates/lumen-zkml", version = "0.3.0" }
-lumen-inference = { path = "crates/lumen-inference", version = "0.3.0" }
-lumen-sandbox = { path = "crates/lumen-sandbox", version = "0.3.0" }
-lumen-agent = { path = "crates/lumen-agent", version = "0.3.0" }
-lumen-orchestrator = { path = "crates/lumen-orchestrator", version = "0.3.0" }
-lumen-sdk = { path = "crates/lumen-sdk", version = "0.3.0" }
-lumen-attestation = { path = "crates/lumen-attestation", version = "0.3.0" }
+lumen-core = { path = "crates/lumen-core", version = "0.4.0" }
+lumen-fixed = { path = "crates/lumen-fixed", version = "0.4.0" }
+lumen-capability = { path = "crates/lumen-capability", version = "0.4.0" }
+lumen-channel = { path = "crates/lumen-channel", version = "0.4.0" }
+lumen-provenance = { path = "crates/lumen-provenance", version = "0.4.0" }
+lumen-defense = { path = "crates/lumen-defense", version = "0.4.0" }
+lumen-zkml = { path = "crates/lumen-zkml", version = "0.4.0" }
+lumen-inference = { path = "crates/lumen-inference", version = "0.4.0" }
+lumen-sandbox = { path = "crates/lumen-sandbox", version = "0.4.0" }
+lumen-agent = { path = "crates/lumen-agent", version = "0.4.0" }
+lumen-orchestrator = { path = "crates/lumen-orchestrator", version = "0.4.0" }
+lumen-sdk = { path = "crates/lumen-sdk", version = "0.4.0" }
+lumen-sdk-macros = { path = "crates/lumen-sdk-macros", version = "0.4.0" }
+lumen-attestation = { path = "crates/lumen-attestation", version = "0.4.0" }
+lumen-onchain = { path = "crates/lumen-onchain", version = "0.4.0" }
 
 # Errors / utilities
 thiserror = "1"
@@ -100,11 +102,10 @@ unreachable_pub = "warn"
 rust_2018_idioms = { level = "warn", priority = -1 }
 
 [workspace.lints.clippy]
-# `all` (correctness/suspicious/style/complexity/perf groups) is the gate; we
-# treat its hits as warnings so CI's `-D warnings` rejects regressions. We
-# deliberately do NOT enable the `pedantic` group workspace-wide: it produces
-# a high noise-to-signal ratio that hides real issues. Crates that want
-# pedantic auditing can opt in locally.
+# Q. T. Felix NOTE: `all` 그룹(정확성/의심/스타일/복잡성/성능)이 기본 게이트웨이입니다.
+#                   CI의 `-D warnings` 설정이 코드 퇴보를 거부할 수 있도록 해당 항목들을 경고(warn)로 처리합니다.
+#                   `pedantic` 그룹은 실제 문제를 가릴 정도로 노이즈가 심하기 때문에 워크스페이스 전체에 활성화하지 않았습니다.
+#                   엄격한 감사가 필요한 크레이트는 개별적으로 해당 설정을 추가할 수 있습니다.
 all = { level = "warn", priority = -1 }
 undocumented_unsafe_blocks = "warn"
 

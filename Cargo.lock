@@ -1439,7 +1439,7 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "lumen-agent"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "lumen-capability",
@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-attestation"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "hex",
  "lumen-core",
@@ -1469,7 +1469,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-capability"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "globset",
  "lumen-core",
@@ -1485,10 +1485,11 @@ dependencies = [
 
 [[package]]
 name = "lumen-channel"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aes-gcm",
  "async-trait",
+ "blake3",
  "lumen-attestation",
  "lumen-core",
  "postcard",
@@ -1501,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1511,6 +1512,7 @@ dependencies = [
  "lumen-core",
  "lumen-defense",
  "lumen-inference",
+ "lumen-onchain",
  "lumen-orchestrator",
  "lumen-provenance",
  "lumen-zkml",
@@ -1525,7 +1527,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "blake3",
  "ed25519-dalek",
@@ -1541,7 +1543,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-defense"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aho-corasick",
  "lumen-core",
@@ -1554,7 +1556,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-fixed"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1562,7 +1564,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-inference"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "blake3",
@@ -1576,8 +1578,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumen-onchain"
+version = "0.4.0"
+dependencies = [
+ "lumen-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "lumen-orchestrator"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "lumen-agent",
@@ -1597,7 +1611,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-provenance"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "lumen-core",
  "postcard",
@@ -1613,7 +1627,7 @@ dependencies = [
 
 [[package]]
 name = "lumen-sandbox"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "lumen-capability",
  "lumen-core",
@@ -1629,11 +1643,23 @@ dependencies = [
 
 [[package]]
 name = "lumen-sdk"
-version = "0.3.0"
+version = "0.4.0"
+dependencies = [
+ "lumen-sdk-macros",
+]
+
+[[package]]
+name = "lumen-sdk-macros"
+version = "0.4.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "lumen-zkml"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "blake3",
  "ff",

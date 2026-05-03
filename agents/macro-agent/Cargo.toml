@@ -1,0 +1,23 @@
+[workspace]
+# `agents/echo-agent` 와 동일한 이유로 별도 워크스페이스: wasm32 전용 빌드.
+
+[package]
+name = "lumen-macro-agent"
+version = "0.4.0"
+edition = "2021"
+publish = false
+description = "Lumen 데모 에이전트 - #[lumen_agent] proc-macro 시연"
+license = "Apache-2.0 OR MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+lumen-sdk = { path = "../../crates/lumen-sdk", features = ["macros"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

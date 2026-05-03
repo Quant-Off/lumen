@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 lumen-core.workspace = true
 lumen-agent.workspace = true
+lumen-capability.workspace = true
 lumen-channel.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }
 async-trait.workspace = true
@@ -24,7 +25,6 @@ tracing.workspace = true
 serde = { workspace = true }
 
 [dev-dependencies]
-lumen-capability.workspace = true
 lumen-defense.workspace = true
 lumen-inference.workspace = true
 lumen-zkml.workspace = true

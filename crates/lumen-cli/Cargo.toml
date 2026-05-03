@@ -26,6 +26,7 @@ lumen-inference.workspace = true
 lumen-zkml.workspace = true
 lumen-agent.workspace = true
 lumen-orchestrator.workspace = true
+lumen-onchain.workspace = true
 clap = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs"] }
 serde = { workspace = true }

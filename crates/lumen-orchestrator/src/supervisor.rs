@@ -33,7 +33,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use lumen_agent::{AgentRuntime, StepResult};
-use lumen_core::{AgentId, Error, Result};
+use lumen_capability::{capability::Capability, Action, PolicyEngine};
+use lumen_core::{AgentId, Error, Result, Timestamp};
 use parking_lot::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -76,12 +77,57 @@ struct AgentSlot {
 
 type AgentRegistry = Arc<Mutex<HashMap<AgentId, AgentSlot>>>;
 
+/// 인터-에이전트 메시지 정책 강제기.
+///
+/// 오케스트레이터에 부착하면 [`AgentSender::send_to`] 가 거부되고, 모든
+/// 송신은 [`AgentSender::send_to_authorized`] 로 capability 와 함께 와야
+/// 합니다. 부착하지 않으면 정책 검증이 비활성화되어 v0.3 의 자유 전달
+/// 모드로 동작합니다.
+#[derive(Clone)]
+pub struct MessagePolicy {
+    engine: Arc<PolicyEngine>,
+    now: Arc<dyn Fn() -> Timestamp + Send + Sync + 'static>,
+}
+
+impl MessagePolicy {
+    /// 시스템 시간 기반 정책. 일반 배포용.
+    pub fn new(engine: Arc<PolicyEngine>) -> Self {
+        Self {
+            engine,
+            now: Arc::new(Timestamp::now),
+        }
+    }
+
+    /// 결정론적 시간을 사용하는 정책 (테스트용).
+    pub fn with_now<F>(engine: Arc<PolicyEngine>, now: F) -> Self
+    where
+        F: Fn() -> Timestamp + Send + Sync + 'static,
+    {
+        Self {
+            engine,
+            now: Arc::new(now),
+        }
+    }
+
+    fn check(&self, cap: &Capability, sender: &AgentId, recipient: &AgentId) -> Result<()> {
+        let action = Action::SendAgentMessage(recipient);
+        self.engine.check(cap, sender, &action, (self.now)())
+    }
+}
+
+impl std::fmt::Debug for MessagePolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MessagePolicy").finish_non_exhaustive()
+    }
+}
+
 /// 에이전트 핸들의 clone 가능한 step / send-to 측면.
 #[derive(Clone)]
 pub struct AgentSender {
     agent_id: AgentId,
     cmd_tx: mpsc::Sender<AgentCmd>,
     registry: AgentRegistry,
+    policy: Option<MessagePolicy>,
 }
 
 impl AgentSender {
@@ -106,8 +152,41 @@ impl AgentSender {
 
     /// 다른 에이전트의 inbox 에 `payload` 를 전달합니다.
     ///
-    /// 대상 에이전트가 등록되지 않았거나 inbox 가 닫혔으면 에러.
+    /// 정책이 부착된 오케스트레이터에서는 거부됩니다 -
+    /// [`AgentSender::send_to_authorized`] 를 사용해 capability 와 함께
+    /// 송신하세요. 정책이 없으면 v0.3 호환 자유 전달 모드로 동작합니다.
     pub async fn send_to(&self, to: AgentId, payload: Vec<u8>) -> Result<()> {
+        if self.policy.is_some() {
+            return Err(Error::Policy(
+                "send_to denied: orchestrator requires capability via send_to_authorized".into(),
+            ));
+        }
+        self.deliver(to, payload).await
+    }
+
+    /// 정책이 부착된 오케스트레이터에서 capability 와 함께 송신합니다.
+    ///
+    /// 검증 단계:
+    /// 1. capability 의 audience 가 송신자, resource 가 `AgentMessage(to)`,
+    ///    서명이 신뢰된 issuer 의 키, 만료 미초과, nonce 미사용임을 확인.
+    /// 2. 통과 시 수신자 inbox 로 전달.
+    ///
+    /// 정책이 부착되지 않은 오케스트레이터에서는 capability 를 무시하고
+    /// 단순 전달합니다 - 호출 사이트가 명시적인 cap 사용 의도를 표현해
+    /// 두면 추후 정책을 활성화할 때 코드 수정 없이 작동합니다.
+    pub async fn send_to_authorized(
+        &self,
+        to: AgentId,
+        payload: Vec<u8>,
+        cap: &Capability,
+    ) -> Result<()> {
+        if let Some(policy) = &self.policy {
+            policy.check(cap, &self.agent_id, &to)?;
+        }
+        self.deliver(to, payload).await
+    }
+
+    async fn deliver(&self, to: AgentId, payload: Vec<u8>) -> Result<()> {
         let target_tx = {
             let agents = self.registry.lock();
             let slot = agents
@@ -194,6 +273,16 @@ impl AgentHandle {
         self.sender.send_to(to, payload).await
     }
 
+    /// 편의: [`AgentSender::send_to_authorized`] 로 위임.
+    pub async fn send_to_authorized(
+        &self,
+        to: AgentId,
+        payload: Vec<u8>,
+        cap: &Capability,
+    ) -> Result<()> {
+        self.sender.send_to_authorized(to, payload, cap).await
+    }
+
     /// 편의: [`AgentInbox::recv`] 로 위임.
     pub async fn recv_inbox(&mut self) -> Result<InterAgentMessage> {
         self.inbox.recv().await
@@ -209,13 +298,27 @@ impl AgentHandle {
 #[derive(Clone, Default)]
 pub struct Orchestrator {
     registry: AgentRegistry,
+    policy: Option<MessagePolicy>,
 }
 
 impl Orchestrator {
-    /// 빈 오케스트레이터를 생성합니다.
+    /// 정책이 없는 빈 오케스트레이터를 생성합니다 (v0.3 호환 모드).
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// 인터-에이전트 메시지 정책을 부착한 오케스트레이터를 생성합니다.
+    ///
+    /// 모든 송신은 [`AgentSender::send_to_authorized`] 로 capability 와
+    /// 함께 와야 하며, plain [`AgentSender::send_to`] 는 [`Error::Policy`]
+    /// 로 거부됩니다.
+    #[must_use]
+    pub fn with_policy(policy: MessagePolicy) -> Self {
+        Self {
+            registry: Arc::new(Mutex::new(HashMap::new())),
+            policy: Some(policy),
+        }
     }
 
     /// 현재 등록된 에이전트 수.
@@ -272,6 +375,7 @@ impl Orchestrator {
                 agent_id,
                 cmd_tx,
                 registry: self.registry.clone(),
+                policy: self.policy.clone(),
             },
             inbox: AgentInbox { agent_id, inbox_rx },
         })
@@ -474,6 +578,175 @@ mod tests {
             })
             .unwrap();
         assert!(h_a.try_recv_inbox().unwrap().is_none());
+        orch.shutdown_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn send_to_denied_when_policy_attached() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let policy = Arc::new(PolicyEngine::new(vec![sk.verifying_key()]));
+        let orch =
+            Orchestrator::with_policy(MessagePolicy::with_now(policy, || Timestamp::from_millis(0)));
+        let (a_id, a_rt) = build_runtime([1; 16]);
+        let (b_id, b_rt) = build_runtime([2; 16]);
+        let h_a = orch
+            .spawn(AgentSpec {
+                agent_id: a_id,
+                runtime: a_rt,
+            })
+            .unwrap();
+        let _h_b = orch
+            .spawn(AgentSpec {
+                agent_id: b_id,
+                runtime: b_rt,
+            })
+            .unwrap();
+        // 정책 부착 시 plain send_to 는 거부.
+        let err = h_a.send_to(b_id, b"hi".to_vec()).await.unwrap_err();
+        assert!(matches!(err, Error::Policy(_)));
+        orch.shutdown_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn send_to_authorized_with_valid_capability_succeeds() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let policy_engine = Arc::new(PolicyEngine::new(vec![sk.verifying_key()]));
+        let orch = Orchestrator::with_policy(MessagePolicy::with_now(
+            policy_engine,
+            || Timestamp::from_millis(0),
+        ));
+        let (a_id, a_rt) = build_runtime([1; 16]);
+        let (b_id, b_rt) = build_runtime([2; 16]);
+        let h_a = orch
+            .spawn(AgentSpec {
+                agent_id: a_id,
+                runtime: a_rt,
+            })
+            .unwrap();
+        let mut h_b = orch
+            .spawn(AgentSpec {
+                agent_id: b_id,
+                runtime: b_rt,
+            })
+            .unwrap();
+
+        // a → b 송신을 허가하는 capability.
+        let cap = Capability::sign(
+            CapabilityBody {
+                id: CapabilityId::random(&mut OsRng),
+                audience: a_id,
+                resource: Resource::AgentMessage(b_id),
+                nonce: [42u8; 16],
+                expires_at: Timestamp::FOREVER,
+                issuer: a_id,
+            },
+            &sk,
+        )
+        .unwrap();
+
+        h_a.send_to_authorized(b_id, b"hi-with-cap".to_vec(), &cap)
+            .await
+            .unwrap();
+        let msg = h_b.recv_inbox().await.unwrap();
+        assert_eq!(msg.from, a_id);
+        assert_eq!(msg.payload, b"hi-with-cap");
+        orch.shutdown_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn send_to_authorized_wrong_recipient_rejected() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let policy_engine = Arc::new(PolicyEngine::new(vec![sk.verifying_key()]));
+        let orch = Orchestrator::with_policy(MessagePolicy::with_now(
+            policy_engine,
+            || Timestamp::from_millis(0),
+        ));
+        let (a_id, a_rt) = build_runtime([1; 16]);
+        let (b_id, b_rt) = build_runtime([2; 16]);
+        let (c_id, c_rt) = build_runtime([3; 16]);
+        let h_a = orch
+            .spawn(AgentSpec {
+                agent_id: a_id,
+                runtime: a_rt,
+            })
+            .unwrap();
+        let _h_b = orch
+            .spawn(AgentSpec {
+                agent_id: b_id,
+                runtime: b_rt,
+            })
+            .unwrap();
+        let _h_c = orch
+            .spawn(AgentSpec {
+                agent_id: c_id,
+                runtime: c_rt,
+            })
+            .unwrap();
+
+        // a 는 b 에게 보낼 권한만 있음 - c 로 보내려 하면 거부.
+        let cap_to_b = Capability::sign(
+            CapabilityBody {
+                id: CapabilityId::random(&mut OsRng),
+                audience: a_id,
+                resource: Resource::AgentMessage(b_id),
+                nonce: [99u8; 16],
+                expires_at: Timestamp::FOREVER,
+                issuer: a_id,
+            },
+            &sk,
+        )
+        .unwrap();
+        let err = h_a
+            .send_to_authorized(c_id, b"hi-to-c".to_vec(), &cap_to_b)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::Capability(_)));
+        orch.shutdown_all().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn send_to_authorized_capability_replay_rejected() {
+        let sk = SigningKey::generate(&mut OsRng);
+        let policy_engine = Arc::new(PolicyEngine::new(vec![sk.verifying_key()]));
+        let orch = Orchestrator::with_policy(MessagePolicy::with_now(
+            policy_engine,
+            || Timestamp::from_millis(0),
+        ));
+        let (a_id, a_rt) = build_runtime([1; 16]);
+        let (b_id, b_rt) = build_runtime([2; 16]);
+        let h_a = orch
+            .spawn(AgentSpec {
+                agent_id: a_id,
+                runtime: a_rt,
+            })
+            .unwrap();
+        let _h_b = orch
+            .spawn(AgentSpec {
+                agent_id: b_id,
+                runtime: b_rt,
+            })
+            .unwrap();
+        let cap = Capability::sign(
+            CapabilityBody {
+                id: CapabilityId::random(&mut OsRng),
+                audience: a_id,
+                resource: Resource::AgentMessage(b_id),
+                nonce: [11u8; 16],
+                expires_at: Timestamp::FOREVER,
+                issuer: a_id,
+            },
+            &sk,
+        )
+        .unwrap();
+        h_a.send_to_authorized(b_id, b"once".to_vec(), &cap)
+            .await
+            .unwrap();
+        // 동일 nonce 의 cap 재사용은 거부.
+        let err = h_a
+            .send_to_authorized(b_id, b"twice".to_vec(), &cap)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::Capability(_)));
         orch.shutdown_all().await.unwrap();
     }
 

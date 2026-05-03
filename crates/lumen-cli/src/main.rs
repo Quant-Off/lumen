@@ -32,6 +32,8 @@ enum Cmd {
     Prove(cmd::prove::Args),
     /// 정책 해시 핀을 강제하면서 한 번의 에이전트 step 을 끝-끝으로 실행.
     Run(cmd::run::Args),
+    /// 온체인 검증기 (EVM / Mina) emit 및 배포.
+    Verifier(cmd::verifier::Args),
 }
 
 #[tokio::main]
@@ -53,5 +55,6 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Defend(a) => cmd::defend::run(a),
         Cmd::Prove(a) => cmd::prove::run(a),
         Cmd::Run(a) => cmd::run::run(a).await,
+        Cmd::Verifier(a) => cmd::verifier::run(a),
     }
 }

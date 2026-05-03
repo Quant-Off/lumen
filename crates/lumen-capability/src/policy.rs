@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use lumen_core::{AgentId, Error, Result, Timestamp, ToolId, VerifyingKey};
+
 use parking_lot::Mutex;
 
 use crate::audit;
@@ -25,6 +26,8 @@ pub enum Action<'a> {
     SpendInferenceTokens(u32),
     /// ZK 증명 요청.
     ZkProofRequest,
+    /// 다른 에이전트에게 인터-에이전트 메시지 송신.
+    SendAgentMessage(&'a AgentId),
 }
 
 /// 동시에 추적되는 nonce 의 최대 개수. 공격자가 capability 를 무한 발행해
@@ -122,6 +125,7 @@ fn resource_matches(resource: &Resource, action: &Action<'_>) -> bool {
         (Resource::Tool(allowed), Action::CallTool(want)) => *want == allowed,
         (Resource::InferenceTokens { max }, Action::SpendInferenceTokens(n)) => n <= max,
         (Resource::ZkProofRequest, Action::ZkProofRequest) => true,
+        (Resource::AgentMessage(allowed), Action::SendAgentMessage(want)) => *want == allowed,
         _ => false,
     }
 }

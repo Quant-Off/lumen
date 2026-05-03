@@ -26,4 +26,9 @@ default = []
 # `alloc` 을 켜면 `String`/`Vec` 기반 보조 함수가 노출됩니다. 그러기 위해서는
 # 에이전트 측에서 글로벌 할당자를 등록해야 합니다.
 alloc = []
+# `macros` 를 켜면 `#[lumen_agent]` proc-macro 가 re-export 됩니다.
+macros = ["dep:lumen-sdk-macros"]
+
+[dependencies]
+lumen-sdk-macros = { workspace = true, optional = true }
 

@@ -1,0 +1,30 @@
+[package]
+name = "lumen-sdk-macros"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Lumen - WASM 에이전트 SDK 의 proc-macros (#[lumen_agent])"
+keywords.workspace = true
+categories.workspace = true
+
+# proc-macro 크레이트는 호스트에서만 실행되며 자체적인 unsafe 사용은 없습니다.
+# (syn/quote 가 내부에서 unsafe 를 쓸 수 있으나 그 부분은 외부 검증.)
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }

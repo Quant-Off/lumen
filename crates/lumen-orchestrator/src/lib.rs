@@ -7,9 +7,9 @@
 //! 거부됩니다. 에이전트별 inbox 는 bounded `mpsc` 채널이라 잘못된 sender 가
 //! 메모리를 고갈시키는 대신 backpressure 를 적용합니다.
 //!
-//! Capability 게이팅된 인터-에이전트 메시징 (에이전트가 특정 peer 에게
-//! 보낼 수 있는 권한을 capability 로 제어) 은 v0.3+ 에 남겨져 있습니다 -
-//! 현재 전달 API 는 무조건적입니다.
+//! v0.4 부터 capability 게이팅된 인터-에이전트 메시징을 지원합니다.
+//! [`MessagePolicy`] 가 부착된 [`Orchestrator`] 는 모든 송신에 대해
+//! `Resource::AgentMessage(recipient)` capability 를 요구합니다.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -17,6 +17,6 @@
 pub mod supervisor;
 
 pub use supervisor::{
-    AgentHandle, AgentInbox, AgentSender, AgentSpec, InterAgentMessage, Orchestrator,
-    DEFAULT_CMD_DEPTH, DEFAULT_INBOX_DEPTH,
+    AgentHandle, AgentInbox, AgentSender, AgentSpec, InterAgentMessage, MessagePolicy,
+    Orchestrator, DEFAULT_CMD_DEPTH, DEFAULT_INBOX_DEPTH,
 };

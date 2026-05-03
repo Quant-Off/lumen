@@ -11,6 +11,7 @@
 
 pub mod manifest;
 pub mod onnx;
+pub mod pinset;
 pub mod safetensors_check;
 pub mod sbom;
 
@@ -19,6 +20,7 @@ use std::path::Path;
 use lumen_core::{Blake3Hash, Error, Result, VerifyingKey};
 
 pub use manifest::{Format, ModelManifest, SignedManifest};
+pub use pinset::{verify_model_against_pinset, PinAcceptance, PinEntry, PinSet, RetiredPin};
 pub use sbom::{generate_sbom, SbomComponent, SbomDocument};
 
 /// 검증된 모델에 대해 반환되는 정보.
