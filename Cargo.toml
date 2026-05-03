@@ -34,7 +34,7 @@ lumen-attestation = { path = "crates/lumen-attestation", version = "0.4.0" }
 lumen-onchain = { path = "crates/lumen-onchain", version = "0.4.0" }
 
 # Errors / utilities
-thiserror = "1"
+thiserror = "2"
 anyhow = "1"
 
 # Async runtime
@@ -46,7 +46,9 @@ futures = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
-postcard = { version = "1", features = ["use-std"] }
+# default features (`heapless-cas`) 가 unmaintained `atomic-polyfill` 을 끌어옴.
+# alloc/std 만 활성화해 의존 그래프에서 heapless 자체를 제거.
+postcard = { version = "1", default-features = false, features = ["use-std"] }
 hex = "0.4"
 
 # Crypto
@@ -71,8 +73,8 @@ parking_lot = "0.12"
 wasmtime = { version = "44", default-features = false, features = ["async", "cranelift", "runtime", "addr2line", "demangle"] }
 wat = "1"
 
-# Provenance
-safetensors = "0.4"
+# Provenance — candle-onnx 가 0.7 을 끌어오므로 동일 메이저로 정렬해 dup 회피.
+safetensors = "0.7"
 
 # CLI
 clap = { version = "4", features = ["derive"] }

@@ -14,7 +14,7 @@ fn write_tiny_safetensors(dir: &tempfile::TempDir, payload: &[u8], file: &str) -
     let view = TensorView::new(Dtype::U8, vec![payload.len()], payload).unwrap();
     let mut tensors = HashMap::new();
     tensors.insert("t0".to_string(), view);
-    let bytes = safetensors::serialize(&tensors, &None).unwrap();
+    let bytes = safetensors::serialize(&tensors, None).unwrap();
     let path = dir.path().join(file);
     fs::write(&path, &bytes).unwrap();
     path
