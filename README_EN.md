@@ -8,6 +8,9 @@ Lumen is a high-security, verifiable Rust AI agent framework for zero-trust and 
 
 ## Quick Start
 
+> [!TIP]
+> To use Lumen’s LLM inference pipeline, please refer to the [PRACTICE_LLM_EN.md](PRACTICE_LLM_EN.md) document.
+
 Developed on Rust stable 1.82 and operates stably on later versions. `rust-toolchain.toml` is applied automatically — no additional configuration is needed.
 
 For a basic build or to run all 140+ tests as of [v0.4](INTRODUCTION_EN.md#roadmap):

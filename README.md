@@ -8,6 +8,9 @@ Lumen은 제로 트러스트(Zero-Trust)와 폐쇄(Air-Gapped) 환경을 위한 
 
 ## 빠른 시작
 
+> [!TIP]
+> Lumen의 LLM 추론 파이프라인을 사용하기 위해 [PRACTICE.md](PRACTICE_LLM.md) 문서를 참고하세요.
+
 Rust stable 1.82에서 개발되었으며 이후 버전에 대해 안정적으로 동작합니다. `rust-toolchain.toml`이 자동 적용되므로 별도 설정은 필요 없습니다.
 
 기본 빌드 또는 [v0.4](INTRODUCTION.md#로드맵) 기준 140개 이상 테스트 전체 실행은 다음을 수행하세요.
