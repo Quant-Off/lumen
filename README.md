@@ -118,7 +118,7 @@ agents/
 
 ## 검증 게이트
 
-머지 가능한 변경은 다음 네 개의 명령이 모두 통과해야 합니다.
+병합 가능한 변경은 다음 네 개의 명령이 모두 통과해야 합니다.
 
 ```bash
 $ cargo build  --workspace --all-targets
