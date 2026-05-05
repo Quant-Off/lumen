@@ -182,7 +182,7 @@ pub enum BlockReason {
 
 The `corpus_version` pin (`"lumen-defense/lexicon/0001"`) is included in the audit log and ZK witness, allowing verifiers to reproduce results with the same corpus. If the corpus changes, the fingerprint changes; if the fingerprint embedded in the witness differs from the one at verification time, verification fails — blocking silent corpus drift.
 
-**Model Provenance** (`lumen-provenance`) performs a full-file BLAKE3 hash and optional Ed25519 signature verification. Safetensors headers undergo structural validation only — tensors are never instantiated. ONNX header validation is performed by a hand-written ~100-line protobuf decoder, and a CycloneDX 1.5 SBOM is automatically generated with BLAKE3 algorithm and license metadata.
+**Model Provenance** (`lumen-provenance`) performs a full-file BLAKE3 hash and optional Ed25519 signature verification. Safetensors headers undergo structural validation only — tensors are never instantiated. ONNX header validation is performed by a hand-written ~100-line protobuf decoder. **GGUF header verification** (for llama.cpp / candle-transformers quantized weights) has been added, checking the magic bytes and version field. `lumen-inference`'s `VerifiedModelLoader` enforces this verification on every load path — the type system makes it structurally impossible to access model bytes via a raw path. A CycloneDX 1.5 SBOM is automatically generated with BLAKE3 algorithm and license metadata.
 
 There are three reasons the ONNX decoder is hand-written rather than using `prost-build`.
 
@@ -229,10 +229,10 @@ flowchart TD
     AG --> PROV[lumen-provenance<br/>Safetensors · ONNX · SBOM]
 ```
 
-A single step of `AgentRuntime::step(prompt) -> StepResult` proceeds in a defined sequence.
+A single step of `AgentRuntime::step(prompt) -> StepResult` proceeds in a defined sequence. For streaming use cases, `AgentRuntime::stream_step(prompt)` emits `StreamEvent::Token` events one token at a time and delivers `StreamEvent::Complete(StepResult)` when the stream ends.
 
 - **Defense** stage: `DefenseEngine::analyze(prompt)` is called; if `Verdict::Block`, the step short-circuits immediately and `defense_verdict` is recorded in `StepResult`.
-- **Inference** stage: `InferenceEngine::complete(prompt, params)` returns `Completion { text, tool_call }`.
+- **Inference** stage: `InferenceEngine::complete(prompt, params)` returns `Completion { text, tool_call }`. Backends that implement `StreamingEngine` (such as `CandleLlmEngine`) produce a token stream via `stream_complete`.
 - **Policy** stage: if `tool_call.is_some()`, the Capability for that tool is looked up and `PolicyEngine::check` performs the four-step verification. If it passes, the **Tool execution** stage calls `ToolHandler::call(args_json)` on the host side and captures the JSON output.
 - **Routing decision construction** stage: the following public inputs and witnesses are determined.
 
@@ -277,7 +277,7 @@ The **v0.2** (completed) milestone added: multi-agent and inter-agent messaging 
 
 The **v0.3** (completed, public release point) milestone includes: an actual Rust → wasm32 agent build pipeline and SDK, ezkl or halo2 actual circuits (starting with argmax and softmax routing), TEE attestation document parsing (Intel TDX quote, AMD SEV-SNP report), candle integration (small ONNX model inference), and GitHub Actions CI (build + test + clippy + cargo-deny + cargo-audit).
 
-The **v0.4** (completed) milestone added: on-chain (Mina or EVM) verifier emit + deployment automation (`lumen-onchain` crate and `lumen verifier emit/deploy` subcommands), capability-gated inter-agent messaging (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 channel encryption (mutually-authenticated ephemeral KEX, blake3 KDF, per-direction keys, deterministic nonce), Rust → WASM agent SDK (`#[lumen_agent]` proc macro — `lumen-sdk-macros` crate), and model pin auto-rotation (`PinSet` + grace period for zero-downtime deployment).
+The **v0.4** (completed) milestone added: on-chain (Mina or EVM) verifier emit + deployment automation (`lumen-onchain` crate and `lumen verifier emit/deploy` subcommands), capability-gated inter-agent messaging (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 channel encryption (mutually-authenticated ephemeral KEX, blake3 KDF, per-direction keys, deterministic nonce), Rust → WASM agent SDK (`#[lumen_agent]` proc macro — `lumen-sdk-macros` crate), model pin auto-rotation (`PinSet` + grace period for zero-downtime deployment), and the **LLM inference pipeline** (`CandleLlmEngine`: GGUF quantized weights + HuggingFace tokenizer + token-by-token streaming, `StreamingEngine` trait, `VerifiedModelLoader` verification enforcement, `QuantizationConfig` with GGUF/FixedPoint/Int8 modes, `BackendConfig` factory, GGUF header provenance verification).
 
 **v1.0** (target) aims for production deployment in government or regulated environments, [FIPS 140-3 compliance audit](https://csrc.nist.gov/pubs/fips/140-3/final), formal verification of select modules using [Kani](https://www.in-com.com/ko/blog/the-rust-developers-toolbox-best-static-code-analysis-tools/#Kani) or [Prusti](https://github.com/viperproject/prusti-dev), and passing one external security audit. Even without formal passage, the project will still be published — with a clear indication that it has not been verified.
 

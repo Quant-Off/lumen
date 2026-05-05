@@ -69,7 +69,7 @@ $ cargo run -p lumen-cli -- prove --prompt "echo hi" --tool echo --circuit-id lu
 $ cargo run -p lumen-cli -- run --policy policies/default.toml --policy-hash <BLAKE3HEX> --prompt "echo hello"
 ```
 
-`verifier`는 v0.4 에 추가된 온체인 검증기 도구로 두 개의 하위 커맨드 `emit`과 `deploy`를 가집니다. `verifier emit`은 EVM(Solidity) 또는 Mina(o1js) 검증기 source 와 deploy 스크립트, 메타데이터 JSON 을 결정론적으로 디스크에 작성합니다(같은 입력에 대해 byte-동일한 출력 보장). `verifier deploy`는 `forge create` 또는 `zk deploy`를 자식 프로세스로 실행하지만 기본은 dry-run 이라 redacted 명령 문자열만 출력하며, EVM private key는 환경변수 `LUMEN_DEPLOY_PRIVKEY`에서 읽고 audit 로그에서는 `***` 로 마스크되어 누출이 차단됩니다. 에어갭(폐쇄환경) 운용에서는 emit으로 산출된 디렉토리를 텍스트로 운반하고 dry-run 출력만 운영 환경에 복사하는 워크플로우가 권장됩니다.
+`verifier`는 v0.4 에 추가된 온체인 검증기 도구로 두 개의 하위 커맨드 `emit`과 `deploy`를 가집니다. `verifier emit`은 EVM(Solidity) 또는 Mina(o1js) 검증기 source 와 deploy 스크립트, 메타데이터 JSON 을 결정론적으로 디스크에 작성합니다(같은 입력에 대해 byte-동일한 출력 보장). `verifier deploy`는 `forge create` 또는 `zk deploy`를 자식 프로세스로 실행하지만 기본은 dry-run 이라 redacted 명령 문자열만 출력하며, EVM private key는 환경변수 `LUMEN_DEPLOY_PRIVKEY`에서 읽고 audit 로그에서는 `***`로 마스크되어 누출이 차단됩니다. 에어갭(폐쇄환경) 운용에서는 emit으로 산출된 디렉토리를 텍스트로 운반하고 dry-run 출력만 운영 환경에 복사하는 워크플로우가 권장됩니다.
 
 ```bash
 $ cargo run -p lumen-cli -- verifier emit --chain evm --circuit-id lumen.routing.binary.v1 --out ./out/evm
@@ -87,10 +87,10 @@ crates/
   lumen-fixed        Q16.16와 Q8.24 결정론 정수 연산 (no_std)
   lumen-capability   Capability 토큰, PolicyEngine, AgentMessage 자원
   lumen-channel      InProc, AttestedChannel, AES-GCM/x25519 EncryptedChannel
-  lumen-provenance   safetensors와 ONNX 헤더 검증, SBOM, PinSet 자동 회전
+  lumen-provenance   Safetensors, ONNX, GGUF 헤더 검증, SBOM, PinSet 자동 회전
   lumen-defense      Aho-Corasick와 RegexSet 기반 3단 인젝션 필터
   lumen-zkml         ProvingSystem trait, Mock, ezkl 스텁, halo2 회로
-  lumen-inference    InferenceEngine trait, Dummy, candle, TEE 채널 엔진
+  lumen-inference    InferenceEngine/StreamingEngine trait, 검증 강제 로더, 양자화 설정; Dummy/CandleLlm(GGUF)/TEE 채널 백엔드
   lumen-sandbox      wasmtime 결정론 Config 와 capability-gated 임포트
   lumen-agent        에이전트 런타임 (defense, infer, policy, tool, prove 순)
   lumen-orchestrator tokio 다중 에이전트 슈퍼바이저, capability-gated 메시징
@@ -109,6 +109,8 @@ agents/
 - `lumen-channel/crypto-channel`: AES-GCM, x25519, BLAKE3 KDF의 EncryptedChannel을 활성화
 - `lumen-zkml/halo2`: halo2 binary argmax회로와 PLONKish제약을 컴파일 
 - `lumen-zkml/ezkl`: ezkl 자리표시자
+- `lumen-inference/candle-llm`: GGUF 양자화 LLM 추론(candle-transformers + HuggingFace 토크나이저, 토큰 단위 스트리밍 포함)
+- `lumen-inference/llama-cpp`: llama.cpp 백엔드 인터페이스 스텁(v0.5 완성 예정, cmake 빌드 필요)
 - `lumen-sdk/macros`: `#[lumen_agent]` proc-macro의 re-export
 - `lumen-sdk/alloc`: 동적 String/Vec 보조 함수의 노출
 
@@ -133,7 +135,7 @@ $ cargo fmt    --all -- --check
 
 `Halo2Prover`는 실제 PLONKish 회로지만 v0.4 시점에서는 succinct KZG 백엔드 대신 MockProver로 검증하므로 off-line verifiability는 빠져 있고 후속 작업에서 KZG로 옮겨갑니다.
 
-`ezkl` 백엔드는 feature 스텁입니다. `DummyEngine`은 echo와 add 패턴만 인식하며 실제 LLM 추론(candle 와 llama.cpp)은 feature 스텁으로 남아 있습니다.
+`ezkl` 백엔드는 feature 스텁입니다. `DummyEngine`은 echo와 add 패턴만 인식합니다. `CandleLlmEngine`(`candle-llm` feature)은 GGUF 양자화 모델을 로드해 토큰 단위 스트리밍 생성을 지원하며, 모든 모델 파일은 `VerifiedModelLoader`를 통해 BLAKE3 + 선택적 Ed25519 검증을 강제합니다. llama.cpp 백엔드(`llama-cpp` feature)는 인터페이스만 정의된 스텁이며 다음 마일스톤에서 완성될 예정입니다.
 
 `lumen-onchain`의 EVM Solidity contract는 회로 제약 재검증(constraint recheck)형태이며 succinct proof 검증으로의 업그레이드는 halo2 KZG 마이그레이션과 동시에 진행될 예정입니다.
 

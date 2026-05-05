@@ -182,7 +182,7 @@ pub enum BlockReason {
 
 `corpus_version` 핀(`"lumen-defense/lexicon/0001"`)이 audit log와 ZK witness에 포함되어 검증자가 동일한 corpus로 재현 가능합니다. corpus가 바뀌면 fingerprint가 바뀌고, witness에 박힌 fingerprint와 검증 시 fingerprint가 다르면 verification이 실패하여 silent corpus drift가 차단됩니다.
 
-**모델 Provenance**(`lumen-provenance`)는 BLAKE3 전체 파일 해시와 선택적 Ed25519 서명 검증을 수행합니다. Safetensors 헤더는 구조 검증만 거치고 텐서를 인스턴스화하지는 않습니다. ONNX 헤더 검증은 직접 작성한 100여 라인 protobuf 디코더로 수행되며, CycloneDX 1.5 SBOM이 BLAKE3 algorithm과 license 메타데이터를 포함하여 자동 생성됩니다.
+**모델 Provenance**(`lumen-provenance`)는 BLAKE3 전체 파일 해시와 선택적 Ed25519 서명 검증을 수행합니다. Safetensors 헤더는 구조 검증만 거치고 텐서를 인스턴스화하지는 않습니다. ONNX 헤더 검증은 직접 작성한 100여 라인 protobuf 디코더로 수행됩니다. **GGUF 헤더 검증**(llama.cpp / candle-transformers 양자화 가중치)이 추가되어 매직 바이트와 버전 필드를 검사합니다. `lumen-inference`의 `VerifiedModelLoader`는 로드 경로에서 이 검증을 강제하여, raw 경로로는 모델 바이트에 접근 자체가 불가능하도록 타입 시스템이 보장합니다. CycloneDX 1.5 SBOM이 BLAKE3 algorithm과 license 메타데이터를 포함하여 자동 생성됩니다.
 
 ONNX 디코더가 `prost-build`가 아닌 직접 작성인 데에는 세 가지 이유가 있습니다. 
 
@@ -229,10 +229,10 @@ flowchart TD
     AG --> PROV[lumen-provenance<br/>Safetensors · ONNX · SBOM]
 ```
 
-`AgentRuntime::step(prompt) -> StepResult`의 한 스텝은 정해진 순서로 진행됩니다. 
+`AgentRuntime::step(prompt) -> StepResult`의 한 스텝은 정해진 순서로 진행됩니다. 스트리밍이 필요한 경우 `AgentRuntime::stream_step(prompt)` 를 사용하면 `StreamEvent::Token` 이벤트가 토큰 단위로 방출되고, 스트림 종료 시 `StreamEvent::Complete(StepResult)` 가 전달됩니다.
 
 - **Defense** 단계: `DefenseEngine::analyze(prompt)`가 호출되고 `Verdict::Block`이면 즉시 단축되어 `StepResult`에 `defense_verdict`가 기록됩니다.
-- **Inference** 단계: `InferenceEngine::complete(prompt, params)`가 `Completion { text, tool_call }`을 반환합니다.
+- **Inference** 단계: `InferenceEngine::complete(prompt, params)`가 `Completion { text, tool_call }`을 반환합니다. `StreamingEngine` 을 구현한 백엔드 (`CandleLlmEngine` 등) 는 `stream_complete` 로 토큰 스트림을 생성합니다.
 - **Policy** 단계: `tool_call.is_some()`인 경우 해당 tool의 Capability를 lookup하고 `PolicyEngine::check`로 4단 검증을 수행합니다. 검증을 통과하면 **Tool 실행** 단계에서 호스트 측 `ToolHandler::call(args_json)`이 호출되고 JSON 출력이 캡처됩니다.
 - **Routing decision 구축** 단계: 다음과 같은 public 입력과 witness가 결정됩니다.
 
@@ -277,7 +277,7 @@ Lumen이 방어하는 공격은 카테고리별로 다음과 같습니다.
 
 **v0.3**(완료, 공개 지점) 마일스톤은 실제 Rust -> wasm32 에이전트 빌드 파이프라인과 SDK, ezkl 또는 halo2 실제 회로 (argmax 와 softmax routing 부터), TEE attestation 문서 파싱 (Intel TDX quote, AMD SEV-SNP 보고서), candle 통합 (소형 ONNX 모델 추론), GitHub Actions CI(build + test + clippy + cargo-deny + cargo-audit)를 포함합니다.
 
-**v0.4**(완료) 마일스톤은 온체인(Mina 또는 EVM) 검증기 emit + 배포 자동화 (`lumen-onchain` 크레이트와 `lumen verifier emit/deploy` 서브커맨드), capability-gated 인터-에이전트 메시징 (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 채널 암호화 (mutual-authenticated ephemeral KEX, blake3 KDF, direction-별 키, deterministic nonce), Rust -> WASM 에이전트 SDK (`#[lumen_agent]` proc macro - `lumen-sdk-macros` 크레이트), 그리고 모델 핀 자동 회전(`PinSet` + grace period로 무중단 배포)을 추가합니다.
+**v0.4**(완료) 마일스톤은 온체인(Mina 또는 EVM) 검증기 emit + 배포 자동화 (`lumen-onchain` 크레이트와 `lumen verifier emit/deploy` 서브커맨드), capability-gated 인터-에이전트 메시징 (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 채널 암호화 (mutual-authenticated ephemeral KEX, blake3 KDF, direction-별 키, deterministic nonce), Rust -> WASM 에이전트 SDK (`#[lumen_agent]` proc macro - `lumen-sdk-macros` 크레이트), 모델 핀 자동 회전(`PinSet` + grace period로 무중단 배포), 그리고 **LLM 추론 파이프라인 구현**(`CandleLlmEngine`: GGUF 양자화 가중치 + HuggingFace 토크나이저 + 토큰 단위 스트리밍, `StreamingEngine` trait, `VerifiedModelLoader` 검증 강제, `QuantizationConfig` GGUF/FixedPoint/Int8, `BackendConfig` 팩토리, GGUF 헤더 provenance 검증)을 추가합니다.
 
 **v1.0**(목표)는 정부 또는 규제 환경에서 production 배포, [FIPS 140-3 compliance audit](https://csrc.nist.gov/pubs/fips/140-3/final), [Kani](https://www.in-com.com/ko/blog/the-rust-developers-toolbox-best-static-code-analysis-tools/#Kani) 또는 [Prusti](https://github.com/viperproject/prusti-dev) 등을 활용한 일부 모듈의 형식 검증, 외부 보안 audit 1회 통과를 목표로 합니다. 정식 통과되지 않아도 여전히 공개하겠습니다. 물론 검증되지 않았다는 표시를 명확히 하겠습니다.
 

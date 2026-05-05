@@ -87,10 +87,10 @@ crates/
   lumen-fixed        Q16.16 and Q8.24 deterministic integer arithmetic (no_std)
   lumen-capability   Capability tokens, PolicyEngine, AgentMessage resource
   lumen-channel      InProc, AttestedChannel, AES-GCM/x25519 EncryptedChannel
-  lumen-provenance   Safetensors and ONNX header verification, SBOM, PinSet auto-rotation
+  lumen-provenance   Safetensors, ONNX, GGUF header verification, SBOM, PinSet auto-rotation
   lumen-defense      Three-stage injection filter based on Aho-Corasick and RegexSet
   lumen-zkml         ProvingSystem trait, Mock, ezkl stub, halo2 circuit
-  lumen-inference    InferenceEngine trait, Dummy, candle, TEE channel engine
+  lumen-inference    InferenceEngine/StreamingEngine traits, verified model loader, quantization config; Dummy/CandleLlm(GGUF)/TEE channel backends
   lumen-sandbox      wasmtime determinism Config and capability-gated imports
   lumen-agent        Agent runtime (defense → infer → policy → tool → prove)
   lumen-orchestrator tokio multi-agent supervisor, capability-gated messaging
@@ -109,6 +109,8 @@ agents/
 - `lumen-channel/crypto-channel`: Enables EncryptedChannel with AES-GCM, x25519, and BLAKE3 KDF
 - `lumen-zkml/halo2`: Compiles the halo2 binary argmax circuit and PLONKish constraints
 - `lumen-zkml/ezkl`: ezkl placeholder
+- `lumen-inference/candle-llm`: GGUF quantized LLM inference (candle-transformers + HuggingFace tokenizer, including token-by-token streaming)
+- `lumen-inference/llama-cpp`: llama.cpp backend interface stub (to be completed in v0.5, requires cmake build)
 - `lumen-sdk/macros`: Re-export of the `#[lumen_agent]` proc-macro
 - `lumen-sdk/alloc`: Exposes dynamic String/Vec helper functions
 
@@ -133,7 +135,7 @@ To verify with all v0.4 features as well, append `--features lumen-channel/crypt
 
 `Halo2Prover` is a real PLONKish circuit, but as of v0.4 it verifies with MockProver instead of a succinct KZG backend — off-line verifiability is therefore absent and will be migrated to KZG in a follow-up.
 
-The `ezkl` backend is a feature stub. `DummyEngine` only recognizes echo and add patterns; actual LLM inference (candle and llama.cpp) remains as feature stubs.
+The `ezkl` backend is a feature stub. `DummyEngine` only recognizes echo and add patterns. `CandleLlmEngine` (the `candle-llm` feature) loads GGUF quantized models and supports token-by-token streaming generation; all model files are subject to mandatory BLAKE3 + optional Ed25519 verification via `VerifiedModelLoader`. The llama.cpp backend (the `llama-cpp` feature) is an interface-only stub to be completed in next milestone.
 
 The EVM Solidity contract in `lumen-onchain` performs constraint rechecking; an upgrade to succinct proof verification is planned to proceed concurrently with the halo2 KZG migration.
 
