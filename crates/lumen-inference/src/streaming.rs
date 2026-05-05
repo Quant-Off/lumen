@@ -1,6 +1,6 @@
 //! 토큰 단위 스트리밍 추론 추상화.
 //!
-//! [`StreamingEngine`] 은 [`InferenceEngine`] 과 독립적인 보조 trait 으로,
+//! [`StreamingEngine`] 은 [`crate::InferenceEngine`] 과 독립적인 보조 trait 으로,
 //! 구현체가 두 trait 을 모두 구현하는 방식을 취합니다. 런타임은 엔진이
 //! `StreamingEngine` 을 구현하는지 확인한 후 토큰 단위 스트리밍을 활성화합니다.
 //!
@@ -45,7 +45,7 @@ pub type TokenStream = Pin<Box<dyn Stream<Item = Result<Token>> + Send>>;
 
 /// 토큰 단위 스트리밍을 지원하는 추론 백엔드.
 ///
-/// 이 trait 을 구현하지 않는 백엔드는 [`InferenceEngine::complete`] 만
+/// 이 trait 을 구현하지 않는 백엔드는 [`crate::InferenceEngine::complete`] 만
 /// 제공하며, 런타임은 그 결과를 한 번에 반환합니다.
 #[async_trait]
 pub trait StreamingEngine: Send + Sync {

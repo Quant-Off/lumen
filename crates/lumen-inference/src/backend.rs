@@ -66,10 +66,8 @@ pub enum BackendConfig {
 
 /// `config` 에 따라 추론 엔진 trait 객체를 생성합니다.
 ///
-/// 반환값은 `Arc<dyn InferenceEngine>` 이므로 [`AgentRuntime`] 에 바로 전달
+/// 반환값은 `Arc<dyn InferenceEngine>` 이므로 `AgentRuntime` 에 바로 전달
 /// 가능합니다.
-///
-/// [`AgentRuntime`]: lumen_agent::AgentRuntime
 pub fn create_engine(config: BackendConfig) -> Result<Arc<dyn InferenceEngine>> {
     match config {
         BackendConfig::Dummy => Ok(Arc::new(DummyEngine::new())),
