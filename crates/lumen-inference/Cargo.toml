@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Lumen - InferenceEngine trait + dummy backend; candle/llama.cpp behind feature flags"
+description = "Lumen - InferenceEngine trait + streaming + verified loader + quantization config; candle/llama.cpp behind feature flags"
 keywords.workspace = true
 categories.workspace = true
 
@@ -15,18 +15,29 @@ workspace = true
 
 [features]
 default = []
+# ONNX 라우팅 엔진 (candle-onnx 기반, 기존 CandleEngine).
 candle = ["dep:candle-core", "dep:candle-onnx"]
+# 전체 LLM 생성 엔진 (candle-transformers + GGUF 양자화 모델 + HF 토크나이저).
+candle-llm = ["dep:candle-core", "dep:candle-transformers", "dep:tokenizers"]
+# llama.cpp 백엔드 (cmake 빌드 필요, 현재 인터페이스 스텁).
+llama-cpp = []
 
 [dependencies]
 lumen-core.workspace = true
 lumen-channel.workspace = true
+lumen-provenance.workspace = true
+lumen-fixed.workspace = true
 async-trait.workspace = true
+futures.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["sync"] }
+blake3 = { workspace = true }
+tracing.workspace = true
 candle-core = { workspace = true, optional = true }
 candle-onnx = { workspace = true, optional = true }
-blake3 = { workspace = true }
+candle-transformers = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

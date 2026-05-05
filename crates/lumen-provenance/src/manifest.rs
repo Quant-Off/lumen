@@ -12,6 +12,8 @@ pub enum Format {
     Safetensors,
     /// ONNX (구조 검증은 v0.3 부터 활성화).
     Onnx,
+    /// GGUF (llama.cpp / candle-transformers 양자화 가중치).
+    Gguf,
 }
 
 /// 단일 모델 산출물용 매니페스트.

@@ -1,6 +1,6 @@
 //! 추론 엔진 추상화.
 //!
-//! 에이전트 런타임은 매 step 마다 [`InferenceEngine`] 를 호출합니다. 엔진은
+//! 에이전트 런타임은 매 step 마다 [`InferenceEngine`] 을 호출합니다. 엔진은
 //! 텍스트 프롬프트를 자유 형식 completion 또는 에이전트 등록부에서 선택된
 //! 구조화된 [`ToolCall`] 로 변환할 책임을 집니다.
 //!
@@ -8,16 +8,34 @@
 //! 실행되며, WASM 샌드박스 내 에이전트는 [`tee_channel`] (즉
 //! [`lumen_channel::SecureChannel`] 위 forward) 로 거기에 도달합니다.
 //!
-//! 단위 테스트, 예제, v0 CLI 데모에는 [`dummy::DummyEngine`] 만으로 충분
-//! 합니다 - 완전 결정론적이며 몇 가지 트리거 단어를 패턴 매치해 예측
-//! 가능한 [`ToolCall`] 을 발행합니다.
+//! ## 백엔드 선택
+//!
+//! | 백엔드           | feature      | 용도                             |
+//! |------------------|--------------|----------------------------------|
+//! | `DummyEngine`    | *(없음)*     | 결정론적 테스트 / 데모            |
+//! | `CandleEngine`   | `candle`     | ONNX 도구 라우팅                  |
+//! | `CandleLlmEngine`| `candle-llm` | GGUF LLM 텍스트 생성 + 스트리밍  |
+//! | `LlamaCppEngine` | `llama-cpp`  | llama.cpp (v0.5 예정)             |
+//! | `ChannelEngine`  | *(없음)*     | TEE 채널 forward                  |
+//!
+//! [`BackendConfig`] + [`backend::create_engine`] 으로 팩토리 패턴을 사용할
+//! 수 있습니다.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 #[cfg(feature = "candle")]
 pub mod candle;
+#[cfg(feature = "candle-llm")]
+pub mod candle_llm;
+#[cfg(feature = "llama-cpp")]
+pub mod llama_cpp;
+
+pub mod backend;
 pub mod dummy;
+pub mod loader;
+pub mod quantize;
+pub mod streaming;
 pub mod tee_channel;
 
 use async_trait::async_trait;
@@ -25,21 +43,45 @@ use lumen_core::{Result, ToolId};
 use serde::{Deserialize, Serialize};
 
 /// 단일 completion 요청의 sampling 파라미터.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// 모든 백엔드가 모든 파라미터를 지원하는 것은 아닙니다. 지원되지 않는
+/// 파라미터는 백엔드가 무시합니다.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SamplingParams {
-    /// 토큰 상한 (hard cap).
+    /// 생성할 최대 토큰 수 (hard cap).
     pub max_tokens: u32,
-    /// 백엔드가 지원하는 경우의 옵션 32 비트 시드.
+    /// 샘플링 온도. `0.0` = greedy decoding.
+    ///
+    /// 높을수록 다양성 증가, 낮을수록 결정론적. 권장 범위: 0.0–2.0.
+    pub temperature: f32,
+    /// Nucleus sampling 확률 (0, 1) 범위. `1.0` = 비활성.
+    ///
+    /// 누적 확률이 `top_p` 에 도달하는 상위 토큰만 유지합니다.
+    pub top_p: f32,
+    /// Top-k sampling. `0` = 비활성.
+    ///
+    /// 상위 `k` 개 토큰만 후보로 유지합니다.
+    pub top_k: u32,
+    /// 반복 패널티. `1.0` = 비활성. `> 1.0` 이면 이미 생성된 토큰 억제.
+    pub repetition_penalty: f32,
+    /// 백엔드가 지원하는 경우의 시드. `None` 이면 백엔드가 임의 시드 선택.
     pub seed: Option<u64>,
+    /// 생성을 중지할 시퀀스 목록. 일치 시 [`FinishReason::StopSequence`] 로 종료.
+    #[serde(default)]
+    pub stop_sequences: Vec<String>,
 }
 
 impl Default for SamplingParams {
     fn default() -> Self {
         Self {
             max_tokens: 256,
-            // dummy 엔진이 기본 설정에서 완전 결정론적이도록 시드를 핀 합니다
-            // - 의외의 기본 동작 방지.
+            // dummy 엔진이 기본 설정에서 완전 결정론적이도록 시드를 핀 합니다.
             seed: Some(0),
+            temperature: 0.0,
+            top_p: 1.0,
+            top_k: 0,
+            repetition_penalty: 1.0,
+            stop_sequences: Vec::new(),
         }
     }
 }
@@ -69,5 +111,14 @@ pub trait InferenceEngine: Send + Sync {
     async fn complete(&self, prompt: &str, params: &SamplingParams) -> Result<Completion>;
 }
 
+pub use backend::BackendConfig;
 pub use dummy::DummyEngine;
+pub use loader::{VerifiedModelHandle, VerifiedModelLoader};
+pub use quantize::{GgufLevel, QuantizationConfig, QuantizationKind};
+pub use streaming::{FinishReason, StreamingEngine, Token, TokenStream};
 pub use tee_channel::ChannelEngine;
+
+#[cfg(feature = "candle-llm")]
+pub use candle_llm::CandleLlmEngine;
+#[cfg(feature = "llama-cpp")]
+pub use llama_cpp::LlamaCppEngine;

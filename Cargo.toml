@@ -98,6 +98,11 @@ pasta_curves = "0.5"
 # candle (LLM 추론) - feature 뒤에서만 활성화. CPU 전용 빌드.
 candle-core = { version = "0.10", default-features = false }
 candle-onnx = { version = "0.10", default-features = false }
+# candle-transformers: 실제 LLM 아키텍처 (LLaMA, Mistral, GPT-2 등). CPU 전용.
+candle-transformers = { version = "0.10", default-features = false }
+# HuggingFace 토크나이저 (tokenizer.json 형식).
+# onig 는 C 소스에서 빌드되므로 시스템 라이브러리 불필요.
+tokenizers = { version = "0.19" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

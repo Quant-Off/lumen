@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod gguf;
 pub mod manifest;
 pub mod onnx;
 pub mod pinset;
@@ -84,6 +85,9 @@ pub fn verify_model(
         }
         Format::Onnx => {
             let _onnx_header = onnx::sniff(path)?;
+        }
+        Format::Gguf => {
+            let _gguf_header = gguf::sniff(path)?;
         }
     }
 

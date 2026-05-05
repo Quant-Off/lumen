@@ -177,6 +177,9 @@ pub fn verify_model_against_pinset(
         crate::Format::Onnx => {
             let _ = crate::onnx::sniff(path)?;
         }
+        crate::Format::Gguf => {
+            let _ = crate::gguf::sniff(path)?;
+        }
     }
 
     Ok((
