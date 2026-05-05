@@ -134,14 +134,12 @@ impl InferenceEngine for CandleLlmEngine {
 
 #[async_trait]
 impl StreamingEngine for CandleLlmEngine {
-    async fn stream_complete(
-        &self,
-        prompt: &str,
-        params: &SamplingParams,
-    ) -> Result<TokenStream> {
+    async fn stream_complete(&self, prompt: &str, params: &SamplingParams) -> Result<TokenStream> {
         let prompt_tokens = self.encode_prompt(prompt)?;
         if prompt_tokens.is_empty() {
-            return Err(Error::Inference("프롬프트 토큰화 결과가 비어있습니다".into()));
+            return Err(Error::Inference(
+                "프롬프트 토큰화 결과가 비어있습니다".into(),
+            ));
         }
 
         let max_tokens = params.max_tokens as usize;

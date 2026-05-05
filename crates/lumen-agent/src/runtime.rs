@@ -45,7 +45,7 @@ pub enum StreamEvent {
     /// 생성된 단일 토큰.
     Token(Token),
     /// 스트리밍 완료 — defense, 도구 실행, ZK 증명을 포함한 최종 결과.
-    Complete(StepResult),
+    Complete(Box<StepResult>),
 }
 
 /// 런타임이 생성 시점에 필요로 하는 입력들.
@@ -108,7 +108,8 @@ impl AgentRuntime {
         let completion = self.inference.complete(prompt, &self.sampling).await?;
 
         // 3. Policy + tool.
-        self.finalize_step(completion, defense_verdict, prompt).await
+        self.finalize_step(completion, defense_verdict, prompt)
+            .await
     }
 
     /// 스트리밍 step 실행.
@@ -122,11 +123,9 @@ impl AgentRuntime {
         &self,
         prompt: &str,
     ) -> Result<impl futures::Stream<Item = Result<StreamEvent>> + '_> {
-        let streaming_engine = self.streaming.as_ref().ok_or_else(|| {
-            Error::NotImplemented(
-                "AgentRuntime: 스트리밍 엔진이 설정되지 않았습니다".into(),
-            )
-        })?;
+        let streaming_engine = self.streaming.as_ref().ok_or(Error::NotImplemented(
+            "AgentRuntime: 스트리밍 엔진이 설정되지 않았습니다",
+        ))?;
 
         // 1. Defense.
         let defense_verdict = self.defense.analyze(prompt);
@@ -144,12 +143,7 @@ impl AgentRuntime {
         let defense_verdict_clone = defense_verdict.clone();
 
         // 3. 토큰 스트림을 tee: 호출자에게 Token 이벤트 방출 + 텍스트 누적
-        let event_stream = build_stream(
-            token_stream,
-            prompt,
-            defense_verdict_clone,
-            self,
-        );
+        let event_stream = build_stream(token_stream, prompt, defense_verdict_clone, self);
 
         Ok(event_stream)
     }
@@ -272,9 +266,7 @@ fn build_stream<'a>(
                                 };
                                 Some((Ok(event), (next_state, prompt, verdict)))
                             }
-                            Some(Err(e)) => {
-                                Some((Err(e), (State::Done, prompt, verdict)))
-                            }
+                            Some(Err(e)) => Some((Err(e), (State::Done, prompt, verdict))),
                             None => {
                                 // 스트림이 FinishReason 없이 종료된 경우도 처리.
                                 let state = State::Finalizing { accumulated };
@@ -302,12 +294,10 @@ fn build_stream<'a>(
                             .await;
                         match result {
                             Ok(step) => Some((
-                                Ok(StreamEvent::Complete(step)),
+                                Ok(StreamEvent::Complete(Box::new(step))),
                                 (State::Done, prompt, verdict),
                             )),
-                            Err(e) => {
-                                Some((Err(e), (State::Done, prompt, verdict)))
-                            }
+                            Err(e) => Some((Err(e), (State::Done, prompt, verdict))),
                         }
                     }
                     State::Done => None,

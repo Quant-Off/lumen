@@ -86,7 +86,10 @@ pub fn create_engine(config: BackendConfig) -> Result<Arc<dyn InferenceEngine>> 
             tokenizer_path,
         } => {
             use crate::candle_llm::CandleLlmEngine;
-            Ok(Arc::new(CandleLlmEngine::from_gguf(&handle, tokenizer_path)?))
+            Ok(Arc::new(CandleLlmEngine::from_gguf(
+                &handle,
+                tokenizer_path,
+            )?))
         }
 
         #[cfg(feature = "llama-cpp")]
@@ -96,7 +99,9 @@ pub fn create_engine(config: BackendConfig) -> Result<Arc<dyn InferenceEngine>> 
             n_ctx,
         } => {
             use crate::llama_cpp::LlamaCppEngine;
-            Ok(Arc::new(LlamaCppEngine::from_verified(&handle, n_threads, n_ctx)?))
+            Ok(Arc::new(LlamaCppEngine::from_verified(
+                &handle, n_threads, n_ctx,
+            )?))
         }
     }
 }

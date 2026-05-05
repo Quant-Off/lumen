@@ -53,9 +53,5 @@ pub trait StreamingEngine: Send + Sync {
     ///
     /// 반환된 스트림을 소진하면 전체 completion 을 얻을 수 있습니다.
     /// 중간에 drop 하면 생성이 취소됩니다.
-    async fn stream_complete(
-        &self,
-        prompt: &str,
-        params: &SamplingParams,
-    ) -> Result<TokenStream>;
+    async fn stream_complete(&self, prompt: &str, params: &SamplingParams) -> Result<TokenStream>;
 }

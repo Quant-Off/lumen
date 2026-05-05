@@ -39,11 +39,7 @@ impl LlamaCppEngine {
     /// 검증된 핸들로부터 엔진 설정을 구성합니다.
     ///
     /// 실제 llama.cpp 초기화는 v0.5 에서 구현됩니다.
-    pub fn from_verified(
-        handle: &VerifiedModelHandle,
-        n_threads: u32,
-        n_ctx: u32,
-    ) -> Result<Self> {
+    pub fn from_verified(handle: &VerifiedModelHandle, n_threads: u32, n_ctx: u32) -> Result<Self> {
         Ok(Self {
             handle_info: format!("{} @ {:?}", handle.model_info.name, handle.path()),
             n_threads,

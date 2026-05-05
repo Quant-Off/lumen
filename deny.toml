@@ -16,6 +16,10 @@ ignore = [
     # feature 활성화 시에만)에서만 옵니다. Drop-in 대체(`pastey`)가 있지만
     # 상위 크레이트들이 채택하기 전까지는 회피 불가.
     { id = "RUSTSEC-2024-0436", reason = "transitive via candle-core (feature-gated), no upstream alternative yet" },
+    # `number_prefix` 는 unmaintained 이지만 알려진 보안 취약점이 없습니다.
+    # `tokenizers v0.19` → `indicatif` 를 통한 transitive 의존으로 직접 제거
+    # 불가. 안전한 업그레이드 경로가 없으며 상위 크레이트가 채택 전까지 회피 불가.
+    { id = "RUSTSEC-2025-0119", reason = "transitive via tokenizers→indicatif, no safe upgrade available upstream" },
 ]
 
 [licenses]
