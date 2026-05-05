@@ -4,7 +4,7 @@ members = ["crates/*"]
 exclude = ["agents/*"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 rust-version = "1.85"
 license = "Apache-2.0 OR MIT"
@@ -17,21 +17,21 @@ categories = ["wasm", "cryptography", "command-line-utilities"]
 
 [workspace.dependencies]
 # In-workspace crates
-lumen-core = { path = "crates/lumen-core", version = "0.4.0" }
-lumen-fixed = { path = "crates/lumen-fixed", version = "0.4.0" }
-lumen-capability = { path = "crates/lumen-capability", version = "0.4.0" }
-lumen-channel = { path = "crates/lumen-channel", version = "0.4.0" }
-lumen-provenance = { path = "crates/lumen-provenance", version = "0.4.0" }
-lumen-defense = { path = "crates/lumen-defense", version = "0.4.0" }
-lumen-zkml = { path = "crates/lumen-zkml", version = "0.4.0" }
-lumen-inference = { path = "crates/lumen-inference", version = "0.4.0" }
-lumen-sandbox = { path = "crates/lumen-sandbox", version = "0.4.0" }
-lumen-agent = { path = "crates/lumen-agent", version = "0.4.0" }
-lumen-orchestrator = { path = "crates/lumen-orchestrator", version = "0.4.0" }
-lumen-sdk = { path = "crates/lumen-sdk", version = "0.4.0" }
-lumen-sdk-macros = { path = "crates/lumen-sdk-macros", version = "0.4.0" }
-lumen-attestation = { path = "crates/lumen-attestation", version = "0.4.0" }
-lumen-onchain = { path = "crates/lumen-onchain", version = "0.4.0" }
+lumen-core = { path = "crates/lumen-core", version = "0.4.1" }
+lumen-fixed = { path = "crates/lumen-fixed", version = "0.4.1" }
+lumen-capability = { path = "crates/lumen-capability", version = "0.4.1" }
+lumen-channel = { path = "crates/lumen-channel", version = "0.4.1" }
+lumen-provenance = { path = "crates/lumen-provenance", version = "0.4.1" }
+lumen-defense = { path = "crates/lumen-defense", version = "0.4.1" }
+lumen-zkml = { path = "crates/lumen-zkml", version = "0.4.1" }
+lumen-inference = { path = "crates/lumen-inference", version = "0.4.1" }
+lumen-sandbox = { path = "crates/lumen-sandbox", version = "0.4.1" }
+lumen-agent = { path = "crates/lumen-agent", version = "0.4.1" }
+lumen-orchestrator = { path = "crates/lumen-orchestrator", version = "0.4.1" }
+lumen-sdk = { path = "crates/lumen-sdk", version = "0.4.1" }
+lumen-sdk-macros = { path = "crates/lumen-sdk-macros", version = "0.4.1" }
+lumen-attestation = { path = "crates/lumen-attestation", version = "0.4.1" }
+lumen-onchain = { path = "crates/lumen-onchain", version = "0.4.1" }
 
 # Errors / utilities
 thiserror = "2"
