@@ -68,7 +68,7 @@ impl CandleEngine {
     /// BLAKE3 다이제스트의 32 바이트를 8 개 `f32` 로 분할한 다음, 모델 입력
     /// 길이에 맞게 반복/잘라냅니다. 진짜 토크나이저는 v0.4 에서.
     fn encode_prompt(&self, prompt: &str) -> Vec<f32> {
-        let digest = blake3::hash(prompt.as_bytes());
+        let digest = lumen_core::Blake3Hash::of(prompt.as_bytes());
         let bytes = digest.as_bytes();
         let mut out = Vec::with_capacity(self.input_len);
         for i in 0..self.input_len {

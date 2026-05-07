@@ -9,13 +9,15 @@
 //! |--------------------|--------------|--------------------------------------|
 //! | `Dummy`            | *(없음)*     | 결정론적 패턴 매칭, 테스트 전용.      |
 //! | `CandleOnnx`       | `candle`     | ONNX 라우팅 (기존 `CandleEngine`).   |
-//! | `CandleLlm`        | `candle-llm` | GGUF LLM (candle-transformers).      |
-//! | `LlamaCpp`         | `llama-cpp`  | llama.cpp 스텁 (v0.5 완성 예정).     |
+//! | `LlamaCpp`         | `llama-cpp`  | llama.cpp 연동 (v0.5 완성 예정).     |
+//!
+//! `candle-llm` (candle-transformers + HF tokenizers) 백엔드는 폐쇄형
+//! 환경 호환을 위해 v0.4 에서 제거되었습니다. 전체 LLM 텍스트 생성은
+//! `llama-cpp` 백엔드 또는 호스트 TEE 의 추론 서비스로 forward 하는
+//! [`crate::ChannelEngine`] 경로를 사용하세요.
 
-#[cfg(any(feature = "candle", feature = "candle-llm", feature = "llama-cpp"))]
+#[cfg(any(feature = "candle", feature = "llama-cpp"))]
 use crate::loader::VerifiedModelHandle;
-#[cfg(feature = "candle-llm")]
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use lumen_core::Result;
@@ -37,17 +39,6 @@ pub enum BackendConfig {
         handle: VerifiedModelHandle,
         /// argmax 인덱스 → ToolId 매핑 테이블.
         tool_table: Vec<lumen_core::ToolId>,
-    },
-
-    /// GGUF 양자화 LLM (candle-transformers 기반).
-    ///
-    /// `candle-llm` feature 가 활성화되어야 합니다.
-    #[cfg(feature = "candle-llm")]
-    CandleLlm {
-        /// 검증된 `.gguf` 모델 핸들.
-        handle: VerifiedModelHandle,
-        /// HuggingFace `tokenizer.json` 경로.
-        tokenizer_path: PathBuf,
     },
 
     /// llama.cpp 기반 엔진 (v0.5 완성 예정).
@@ -76,18 +67,6 @@ pub fn create_engine(config: BackendConfig) -> Result<Arc<dyn InferenceEngine>> 
         BackendConfig::CandleOnnx { handle, tool_table } => {
             use crate::candle::CandleEngine;
             Ok(Arc::new(CandleEngine::load(handle.path(), tool_table)?))
-        }
-
-        #[cfg(feature = "candle-llm")]
-        BackendConfig::CandleLlm {
-            handle,
-            tokenizer_path,
-        } => {
-            use crate::candle_llm::CandleLlmEngine;
-            Ok(Arc::new(CandleLlmEngine::from_gguf(
-                &handle,
-                tokenizer_path,
-            )?))
         }
 
         #[cfg(feature = "llama-cpp")]

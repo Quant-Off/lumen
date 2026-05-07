@@ -52,7 +52,7 @@ impl LlamaCppEngine {
 impl InferenceEngine for LlamaCppEngine {
     async fn complete(&self, _prompt: &str, _params: &SamplingParams) -> Result<Completion> {
         Err(Error::NotImplemented(
-            "LlamaCppEngine: llama-cpp-2 연동이 v0.5 에서 구현됩니다".into(),
+            "LlamaCppEngine: llama-cpp-2 연동이 v0.5 에서 구현됩니다",
         ))
     }
 }
@@ -65,7 +65,7 @@ impl StreamingEngine for LlamaCppEngine {
         _params: &SamplingParams,
     ) -> Result<TokenStream> {
         Err(Error::NotImplemented(
-            "LlamaCppEngine: 스트리밍은 v0.5 에서 구현됩니다".into(),
+            "LlamaCppEngine: 스트리밍은 v0.5 에서 구현됩니다",
         ))
     }
 }

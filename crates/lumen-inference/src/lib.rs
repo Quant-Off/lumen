@@ -14,20 +14,27 @@
 //! |------------------|--------------|----------------------------------|
 //! | `DummyEngine`    | *(없음)*     | 결정론적 테스트 / 데모            |
 //! | `CandleEngine`   | `candle`     | ONNX 도구 라우팅                  |
-//! | `CandleLlmEngine`| `candle-llm` | GGUF LLM 텍스트 생성 + 스트리밍  |
-//! | `LlamaCppEngine` | `llama-cpp`  | llama.cpp (v0.5 예정)             |
+//! | `LlamaCppEngine` | `llama-cpp`  | llama.cpp 연동 (v0.5 예정)        |
 //! | `ChannelEngine`  | *(없음)*     | TEE 채널 forward                  |
 //!
 //! [`BackendConfig`] + [`backend::create_engine`] 으로 팩토리 패턴을 사용할
 //! 수 있습니다.
+//!
+//! ## 폐쇄형(Air-Gapped) 환경 메모
+//!
+//! HuggingFace 의 `tokenizers` 크레이트와 `candle-transformers` 의 GGUF
+//! 텍스트 생성 백엔드는 외부 다운로드 코드를 포함하고 의존 트리가 매우
+//! 커서 폐쇄망 빌드 부담이 큽니다. 따라서 v0.4 부터 `candle-llm` feature
+//! 는 제거되었습니다. 전체 LLM 텍스트 생성이 필요한 경우 `llama-cpp`
+//! (llama.cpp 백엔드, 내장 BPE / SentencePiece 토크나이저) 또는
+//! 호스트 TEE 의 추론 서비스로 [`ChannelEngine`] 을 통해 forward 하는
+//! 경로를 사용하세요.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 #[cfg(feature = "candle")]
 pub mod candle;
-#[cfg(feature = "candle-llm")]
-pub mod candle_llm;
 #[cfg(feature = "llama-cpp")]
 pub mod llama_cpp;
 
@@ -118,7 +125,5 @@ pub use quantize::{GgufLevel, QuantizationConfig, QuantizationKind};
 pub use streaming::{FinishReason, StreamingEngine, Token, TokenStream};
 pub use tee_channel::ChannelEngine;
 
-#[cfg(feature = "candle-llm")]
-pub use candle_llm::CandleLlmEngine;
 #[cfg(feature = "llama-cpp")]
 pub use llama_cpp::LlamaCppEngine;

@@ -16,10 +16,11 @@ workspace = true
 [features]
 default = []
 # ONNX 라우팅 엔진 (candle-onnx 기반, 기존 CandleEngine).
+# 폐쇄망 배포에서는 cargo vendor 로 candle 소스를 미리 가져와야 합니다 -
+# `AIR-GAPPED.md` 가이드 참고.
 candle = ["dep:candle-core", "dep:candle-onnx"]
-# 전체 LLM 생성 엔진 (candle-transformers + GGUF 양자화 모델 + HF 토크나이저).
-candle-llm = ["dep:candle-core", "dep:candle-transformers", "dep:tokenizers"]
 # llama.cpp 백엔드 (cmake 빌드 필요, 현재 인터페이스 스텁).
+# 전체 LLM 텍스트 생성이 필요한 경우 이 백엔드를 사용하세요.
 llama-cpp = []
 
 [dependencies]
@@ -32,12 +33,9 @@ futures.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["sync"] }
-blake3 = { workspace = true }
 tracing.workspace = true
 candle-core = { workspace = true, optional = true }
 candle-onnx = { workspace = true, optional = true }
-candle-transformers = { workspace = true, optional = true }
-tokenizers = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
