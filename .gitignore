@@ -2,3 +2,11 @@ target/
 .idea/
 *.swp
 .DS_Store
+.claude/
+
+# 폐쇄형 빌드 산출물 (scripts/vendor.sh 가 생성).
+# 템플릿 .cargo/vendor-config.toml 만 커밋되며, 실제 활성 설정과
+# vendor/ 디렉토리는 빌드 환경별로 생성됩니다. AIR-GAPPED.md 참고.
+/vendor/
+/.cargo/config.toml
+/.cargo/config.toml.backup-*
