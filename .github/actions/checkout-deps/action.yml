@@ -3,8 +3,11 @@
 # 워크스페이스 외부(`..`)를 허용하지 않으므로 `git clone`으로 직접 시블링
 # 위치에 배치합니다.
 #
-# 핀: lumen의 `workspace.dependencies`가 `version = "1.0.0"` 을 요구하므로
-#     elib-k0-nt 의 동명 태그(`1.0.0`)에 고정해 재현 가능한 빌드를 보장합니다.
+# 핀: 의존성 그래프(특히 zeroize 엣지)가 `Cargo.lock`과 일치해야 `--locked`
+#     빌드가 통과합니다. elib-k0-nt 태그 `1.0.0`은 zeroize 엣지가 없는 옛
+#     스냅샷이므로 사용 불가. 현재 lock은 master HEAD에서 생성되었기에
+#     동일 커밋 SHA에 고정합니다. lock을 갱신할 때 본 SHA도 함께
+#     갱신해야 CI가 재현 가능 상태로 유지됩니다.
 
 name: checkout-deps
 description: Lumen 워크스페이스의 시블링 path dependency(elib-k0-nt) 체크아웃
@@ -13,7 +16,8 @@ inputs:
   ref:
     description: elib-k0-nt에서 체크아웃할 git ref(태그/브랜치/커밋 SHA)
     required: false
-    default: "1.0.0"
+    # `Cargo.lock` 과 정합하는 master HEAD; 변경 시 lock 도 함께 재생성
+    default: "55a96b33c2e9cd050683634badf3c96e92d15c87"
   token:
     description: 비공개 elib-k0-nt 접근용 토큰; 비워두면 익명 HTTPS clone 시도
     required: false
@@ -36,13 +40,20 @@ runs:
           URL="https://github.com/Quant-Off/elib-k0-nt.git"
         fi
 
-        if [ -d "$TARGET/.git" ]; then
-          echo "elib-k0-nt 이미 존재: '$REF'로 갱신합니다."
-          git -C "$TARGET" fetch --depth=1 origin "$REF"
-          git -C "$TARGET" checkout --detach FETCH_HEAD
+        # init + fetch 패턴: `git clone --branch`는 SHA를 받지 못하므로
+        # 임의 ref(태그/브랜치/커밋)를 모두 처리하기 위해 빈 저장소에서
+        # 시작해 단일 ref를 얕게(depth=1) 가져옵니다.
+        if [ ! -d "$TARGET/.git" ]; then
+          echo "elib-k0-nt 를 '$TARGET' 에 초기화합니다."
+          mkdir -p "$TARGET"
+          git -C "$TARGET" init -q
+          git -C "$TARGET" remote add origin "$URL"
         else
-          echo "elib-k0-nt를 '$REF'로 '$TARGET'에 클론합니다."
-          git clone --depth=1 --branch "$REF" "$URL" "$TARGET"
+          echo "elib-k0-nt 이미 존재: origin URL 갱신 후 재페치합니다."
+          git -C "$TARGET" remote set-url origin "$URL"
         fi
+
+        git -C "$TARGET" fetch --depth=1 origin "$REF"
+        git -C "$TARGET" checkout --detach FETCH_HEAD
 
         echo "elib-k0-nt HEAD: $(git -C "$TARGET" rev-parse HEAD)"
