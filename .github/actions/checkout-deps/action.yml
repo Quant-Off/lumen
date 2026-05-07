@@ -1,0 +1,48 @@
+# 워크스페이스 `Cargo.toml`의 path dependency (`../elib-k0-nt/*`)가 가리키는
+# 시블링 디렉토리를 CI 환경에 재현합니다. `actions/checkout`는 `path` 입력에
+# 워크스페이스 외부(`..`)를 허용하지 않으므로 `git clone`으로 직접 시블링
+# 위치에 배치합니다.
+#
+# 핀: lumen의 `workspace.dependencies`가 `version = "1.0.0"` 을 요구하므로
+#     elib-k0-nt 의 동명 태그(`1.0.0`)에 고정해 재현 가능한 빌드를 보장합니다.
+
+name: checkout-deps
+description: Lumen 워크스페이스의 시블링 path dependency(elib-k0-nt) 체크아웃
+
+inputs:
+  ref:
+    description: elib-k0-nt에서 체크아웃할 git ref(태그/브랜치/커밋 SHA)
+    required: false
+    default: "1.0.0"
+  token:
+    description: 비공개 elib-k0-nt 접근용 토큰; 비워두면 익명 HTTPS clone 시도
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: clone elib-k0-nt as sibling
+      shell: bash
+      run: |
+        set -euo pipefail
+        TARGET="$(dirname "$GITHUB_WORKSPACE")/elib-k0-nt"
+        REF="${{ inputs.ref }}"
+        TOKEN="${{ inputs.token }}"
+
+        if [ -n "$TOKEN" ]; then
+          URL="https://x-access-token:${TOKEN}@github.com/Quant-Off/elib-k0-nt.git"
+        else
+          URL="https://github.com/Quant-Off/elib-k0-nt.git"
+        fi
+
+        if [ -d "$TARGET/.git" ]; then
+          echo "elib-k0-nt 이미 존재: '$REF'로 갱신합니다."
+          git -C "$TARGET" fetch --depth=1 origin "$REF"
+          git -C "$TARGET" checkout --detach FETCH_HEAD
+        else
+          echo "elib-k0-nt를 '$REF'로 $TARGET에 클론합니다."
+          git clone --depth=1 --branch "$REF" "$URL" "$TARGET"
+        fi
+
+        echo "elib-k0-nt HEAD: $(git -C "$TARGET" rev-parse HEAD)"
