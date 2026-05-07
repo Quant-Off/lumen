@@ -11,10 +11,12 @@ pub mod crypto;
 pub mod error;
 pub mod hash;
 pub mod ids;
+pub mod rng;
 pub mod time;
 
 pub use crypto::{Signature, SigningKey, VerifyingKey};
 pub use error::{Error, Result};
 pub use hash::Blake3Hash;
 pub use ids::{AgentId, CapabilityId, RequestId, ToolId};
+pub use rng::{HashDrbg, OsRng, Rng};
 pub use time::Timestamp;

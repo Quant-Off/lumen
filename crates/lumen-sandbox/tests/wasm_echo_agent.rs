@@ -19,9 +19,9 @@ use lumen_capability::{
     capability::{Capability, CapabilityBody},
     PolicyEngine, Resource,
 };
+use lumen_core::rng::OsRng;
 use lumen_core::{AgentId, CapabilityId, SigningKey, Timestamp, ToolId};
 use lumen_sandbox::{HostState, Sandbox, SandboxConfig};
-use rand::rngs::OsRng;
 
 /// 워크스페이스 루트 기준 wasm 산출물 경로.
 fn echo_agent_wasm_path() -> PathBuf {

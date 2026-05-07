@@ -16,13 +16,13 @@ workspace = true
 [dependencies]
 thiserror.workspace = true
 serde = { workspace = true }
-blake3 = { workspace = true }
-ed25519-dalek = { workspace = true }
-rand_core.workspace = true
-subtle.workspace = true
+elib-blake.workspace = true
+elib-ed25519.workspace = true
+elib-rng.workspace = true
+elib-constant-time.workspace = true
+elib-zeroize.workspace = true
 hex.workspace = true
 postcard.workspace = true
 
 [dev-dependencies]
-rand = { workspace = true }
 serde_json = { workspace = true }
