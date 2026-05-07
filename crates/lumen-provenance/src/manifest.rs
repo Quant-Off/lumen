@@ -5,6 +5,13 @@ use std::path::PathBuf;
 use lumen_core::{Blake3Hash, Error, Result, Signature, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
+/// Ed25519 도메인 분리 prefix.
+///
+/// Capability / 보안 채널 핸드셰이크 / 프레임 서명과 동일한 신원 키를 공유
+/// 하는 환경에서, 매니페스트 서명을 다른 프로토콜의 서명에 재사용하는
+/// cross-protocol replay 를 차단합니다.
+const MANIFEST_SIGN_DOMAIN: &[u8] = b"lumen.provenance.manifest.v1";
+
 /// 매니페스트가 기술하는 파일 형식.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Format {
@@ -43,8 +50,8 @@ pub struct ModelManifest {
 impl ModelManifest {
     /// 서명이 덮는 바이트.
     ///
-    /// `name | version | format | hash | license` 를 연접합니다. 경로를
-    /// 제외하면 배포 위치에 무관하게 서명이 안정적입니다.
+    /// `MANIFEST_SIGN_DOMAIN || postcard({name | version | format | hash | license})`.
+    /// 경로 (`path`) 를 제외하므로 배포 위치에 무관하게 서명이 안정적입니다.
     pub fn signing_payload(&self) -> Result<Vec<u8>> {
         #[derive(Serialize)]
         struct Body<'a> {
@@ -61,7 +68,12 @@ impl ModelManifest {
             hash: self.hash,
             license: self.license.as_deref(),
         };
-        postcard::to_allocvec(&body).map_err(|e| Error::Decode(format!("manifest payload: {e}")))
+        let body_bytes = postcard::to_allocvec(&body)
+            .map_err(|e| Error::Decode(format!("manifest payload: {e}")))?;
+        let mut out = Vec::with_capacity(MANIFEST_SIGN_DOMAIN.len() + body_bytes.len());
+        out.extend_from_slice(MANIFEST_SIGN_DOMAIN);
+        out.extend_from_slice(&body_bytes);
+        Ok(out)
     }
 
     /// `key` 로 매니페스트에 서명하고 `signature` 와 `signer` 를 채웁니다.
