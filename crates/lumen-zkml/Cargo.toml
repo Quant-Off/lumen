@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Lumen - proving-system trait + mock commitment prover; ezkl/halo2 stubs behind feature flags"
+description = "Lumen - proving-system trait + mock BLAKE3 commitment prover; ezkl stub behind feature flag"
 keywords.workspace = true
 categories.workspace = true
 
@@ -16,18 +16,14 @@ workspace = true
 [features]
 default = []
 ezkl = []
-halo2 = ["dep:halo2_proofs", "dep:ff", "dep:pasta_curves"]
 
 [dependencies]
 lumen-core.workspace = true
 serde = { workspace = true }
 postcard.workspace = true
-blake3 = { workspace = true }
+elib-blake.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-halo2_proofs = { workspace = true, optional = true }
-ff = { workspace = true, optional = true }
-pasta_curves = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
