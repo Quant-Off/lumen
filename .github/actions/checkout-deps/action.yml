@@ -41,7 +41,7 @@ runs:
           git -C "$TARGET" fetch --depth=1 origin "$REF"
           git -C "$TARGET" checkout --detach FETCH_HEAD
         else
-          echo "elib-k0-nt를 '$REF'로 $TARGET에 클론합니다."
+          echo "elib-k0-nt를 '$REF'로 '$TARGET'에 클론합니다."
           git clone --depth=1 --branch "$REF" "$URL" "$TARGET"
         fi
 
