@@ -2,14 +2,14 @@
 
 [![Language](https://img.shields.io/badge/README-English_Ver-blue?style=for-the-badge)](README_EN.md)
 [![Lumen-Ver](https://img.shields.io/badge/Lumen_Milestone-v0.4.1-000000?style=for-the-badge)](https://github.com/Quant-Off/)
-[![Qu4nt-Space-Discord](https://img.shields.io/badge/Qu4nt_Space-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://github.com/Quant-Off/)
+[![Qu4nt-Space-Discord](https://img.shields.io/badge/Qu4nt_Space-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9utg4hp3m8)
 
 Lumen은 제로 트러스트(Zero-Trust)와 폐쇄(Air-Gapped) 환경을 위한 고보안, 검증 가능한 Rust AI 에이전트 프레임워크입니다. 권한 통제(WASM 샌드박스)와 결과 검증(zkML)을 결합하여 국가기관 수준의 엄격한 보안 규격을 충족하는 안전한 자율형 AI 구동을 목표로 합니다. 자세한 설계 철학과 기술적 배경은 [INTRODUCTION.md](INTRODUCTION.md) 문서를 참고하세요.
 
 ## 빠른 시작
 
 > [!TIP]
-> Lumen의 LLM 추론 파이프라인을 사용하기 위해 [PRACTICE.md](PRACTICE_LLM.md) 문서를 참고하세요.
+> Lumen의 LLM 추론 파이프라인을 사용하기 위해 [PRACTICE_LLM.md](PRACTICE_LLM.md) 문서를 참고하세요.
 
 Rust stable 1.82에서 개발되었으며 이후 버전에 대해 안정적으로 동작합니다. `rust-toolchain.toml`이 자동 적용되므로 별도 설정은 필요 없습니다.
 

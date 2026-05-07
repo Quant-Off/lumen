@@ -1,5 +1,8 @@
 # Lumen
 
+[![Language](https://img.shields.io/badge/INTRODUCTION-English_Ver-blue?style=for-the-badge)](INTRODUCTION.md)
+[![Qu4nt-Space-Discord](https://img.shields.io/badge/Qu4nt_Space-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9utg4hp3m8)
+
 Lumen is an open-source, verifiable AI agent framework for zero-trust environments.
 
 ## Why Lumen

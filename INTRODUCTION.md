@@ -1,5 +1,8 @@
 # Lumen
 
+[![Language](https://img.shields.io/badge/INTRODUCTION-English_Ver-blue?style=for-the-badge)](INTRODUCTION.md)
+[![Qu4nt-Space-Discord](https://img.shields.io/badge/Qu4nt_Space-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9utg4hp3m8)
+
 Lumen은 제로 트러스트 환경을 위한 검증 가능한 AI 에이전트 프레임워크 오픈 소스 프로젝트입니다.
 
 ## 왜 Lumen인가

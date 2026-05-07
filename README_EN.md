@@ -2,7 +2,7 @@
 
 [![Language](https://img.shields.io/badge/README-Korean_Ver-blue?style=for-the-badge)](README.md)
 [![Lumen-Ver](https://img.shields.io/badge/Lumen_Milestone-v0.4.1-000000?style=for-the-badge)](https://github.com/Quant-Off/)
-[![Qu4nt-Space-Discord](https://img.shields.io/badge/Qu4nt_Space-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://github.com/Quant-Off/)
+[![Qu4nt-Space-Discord](https://img.shields.io/badge/Qu4nt_Space-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9utg4hp3m8)
 
 Lumen is a high-security, verifiable Rust AI agent framework for zero-trust and air-gapped environments. It combines permission control (WASM sandbox) with result verification (zkML) to enable safe, autonomous AI operation that meets the strict security standards required by government-grade deployments. For detailed design philosophy and technical background, refer to the [INTRODUCTION_EN.md](INTRODUCTION_EN.md) document.
 
