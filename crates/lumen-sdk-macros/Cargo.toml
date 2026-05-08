@@ -13,6 +13,7 @@ categories.workspace = true
 # proc-macro 크레이트는 호스트에서만 실행되며 자체적인 unsafe 사용은 없습니다.
 # (syn/quote 가 내부에서 unsafe 를 쓸 수 있으나 그 부분은 외부 검증.)
 [lints.rust]
+warnings = { level = "deny", priority = -2 }
 unsafe_code = "deny"
 missing_docs = "warn"
 unreachable_pub = "warn"

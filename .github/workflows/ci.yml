@@ -12,7 +12,15 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
+  # Q. T. Felix NOTE: 과거에는 `RUSTFLAGS: -D warnings` 를 워크플로우 전역으로
+  #                   걸었으나, 이 환경변수는 워크스페이스 외부 path dep
+  #                   (`../elib-k0-nt/*`) 컴파일에도 그대로 적용되어 외부
+  #                   레포의 사소한 dead_code 경고가 lumen CI 를 깨뜨리는
+  #                   문제가 있었습니다. 동등한 게이트는 이제 워크스페이스
+  #                   `[workspace.lints.rust]` 의 `warnings = "deny"` 로
+  #                   lumen 멤버에만 한정해 적용됩니다. clippy 게이트는
+  #                   여전히 `cargo clippy ... -- -D warnings` 로 수행하며,
+  #                   이 인자는 primary package (lumen 멤버) 에만 적용됩니다.
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -114,10 +122,12 @@ jobs:
         run: cargo build --release --target wasm32-unknown-unknown --locked
 
   # ---------------------------------------------------------------------------
-  # 무거운 optional features (halo2, candle).
+  # 무거운 optional features (candle).
+  # 참고: `lumen-zkml` 의 `halo2` feature 는 v0.4 (커밋 ac93393) 에서 폐쇄망
+  #      호환성을 위해 제거되었습니다 (`AIR-GAPPED.md` §1 참조).
   # ---------------------------------------------------------------------------
   features:
-    name: optional features (halo2, candle)
+    name: optional features (candle)
     needs: image
     runs-on: ubuntu-latest
     container:
@@ -129,10 +139,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
-      - name: cargo build --features halo2
-        run: cargo build -p lumen-zkml --features halo2 --locked
-      - name: cargo test --features halo2
-        run: cargo test -p lumen-zkml --features halo2 --locked
       - name: cargo build --features candle
         run: cargo build -p lumen-inference --features candle --locked
 

@@ -13,6 +13,7 @@ categories.workspace = true
 # wasmtime FFI requires `unsafe`. Override the workspace deny rule locally and
 # enforce documented `// SAFETY:` blocks via clippy.
 [lints.rust]
+warnings = { level = "deny", priority = -2 }
 unsafe_code = "allow"
 missing_docs = "warn"
 unreachable_pub = "warn"
