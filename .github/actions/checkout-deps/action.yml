@@ -17,7 +17,7 @@ inputs:
     description: elib-k0-nt에서 체크아웃할 git ref(태그/브랜치/커밋 SHA)
     required: false
     # `Cargo.lock` 과 정합하는 master HEAD; 변경 시 lock 도 함께 재생성
-    default: "55a96b33c2e9cd050683634badf3c96e92d15c87"
+    default: "618ac0dc8200ce740cbd698d0e93adb98ddc75e7"
   token:
     description: 비공개 elib-k0-nt 접근용 토큰; 비워두면 익명 HTTPS clone 시도
     required: false
