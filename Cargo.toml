@@ -75,7 +75,8 @@ parking_lot = "0.12"
 wasmtime = { version = "44", default-features = false, features = ["async", "cranelift", "runtime", "addr2line", "demangle"] }
 wat = "1"
 
-# Provenance — candle-onnx 가 0.7 을 끌어오므로 동일 메이저로 정렬해 dup 회피.
+# Provenance — Hugging Face safetensors 헤더 sniff 용. 단독으로 동작하는
+# 작은 크레이트라 폐쇄망 빌드에 무리 없이 포함됩니다.
 safetensors = "0.7"
 
 # CLI
@@ -91,19 +92,18 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 # Dev / bench
 criterion = "0.5"
 
-# candle (ONNX 라우팅 추론) - feature 뒤에서만 활성화. CPU 전용 빌드.
-# 폐쇄망 배포에서는 `cargo vendor` 로 사전 fetch 필요 (AIR-GAPPED.md 참고).
-candle-core = { version = "0.10", default-features = false }
-candle-onnx = { version = "0.10", default-features = false }
-
-# 참고: 다음 의존성은 v0.4 폐쇄형(Air-Gapped) 호환성 작업으로 제거되었습니다.
+# 참고: 다음 의존성은 폐쇄형(Air-Gapped) 호환성 작업으로 제거되었습니다.
 #   - `halo2_proofs` / `ff` / `pasta_curves` : ZK 백엔드. mock prover 가
 #     이미 BLAKE3 기반이라 halo2 회로 없이 동작합니다. 실제 succinct ZK
 #     백엔드 (SP1 / RISC Zero 등) 는 마일스톤 재검토 시 결정.
-#   - `candle-transformers` + `tokenizers` : GGUF LLM 텍스트 생성 백엔드.
-#     의존 트리가 너무 크고 HF Hub 다운로드 코드를 포함하므로 폐쇄망에
-#     부적합. 전체 LLM 생성은 `llama-cpp` 백엔드 또는 호스트 TEE 의
-#     ChannelEngine forward 경로를 사용.
+#   - `candle-core` / `candle-onnx` / `candle-transformers` / `tokenizers`
+#     : GGUF·ONNX 추론 백엔드. 의존 트리가 매우 크고 (`gemm`, `pulp`,
+#     `paste`, `tokenizers`, `rand_core` 등) HF Hub 다운로드 코드를
+#     포함하므로 폐쇄망에 부적합. 도구 라우팅용 토크나이저는 자체 구현인
+#     `lumen_inference::BpeTokenizer` 를 사용하고, 전체 LLM 생성은
+#     `llama-cpp` 백엔드 또는 호스트 TEE 의 ChannelEngine forward 경로를
+#     사용합니다.
+#   - `rand` / `rand_core` : `lumen_core::rng` (HashDRBG 어댑터) 로 대체.
 
 [workspace.lints.rust]
 # Q. T. Felix NOTE: 모든 경고를 deny 로 격상해 lumen 멤버 크레이트의 게이트로

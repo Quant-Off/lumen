@@ -9,14 +9,7 @@ no-default-features = false
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-ignore = [
-    # `paste` 는 archived/unmaintained 이지만 eager macro expansion 만 수행하는
-    # 작은 proc-macro 크레이트로 알려진 취약점이 없습니다. 우리 직접 의존이
-    # 아니라 `candle-core` → `gemm` / `tokenizers` / `pulp` 트리(즉 `candle`
-    # feature 활성화 시에만)에서만 옵니다. Drop-in 대체(`pastey`)가 있지만
-    # 상위 크레이트들이 채택하기 전까지는 회피 불가.
-    { id = "RUSTSEC-2024-0436", reason = "transitive via candle-core (feature-gated), no upstream alternative yet" },
-]
+ignore = []
 
 [licenses]
 confidence-threshold = 0.93
