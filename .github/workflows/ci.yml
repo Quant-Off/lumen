@@ -122,12 +122,18 @@ jobs:
         run: cargo build --release --target wasm32-unknown-unknown --locked
 
   # ---------------------------------------------------------------------------
-  # 무거운 optional features (candle).
-  # 참고: `lumen-zkml` 의 `halo2` feature 는 v0.4 (커밋 ac93393) 에서 폐쇄망
-  #      호환성을 위해 제거되었습니다 (`AIR-GAPPED.md` §1 참조).
+  # 폐쇄 환경(Air-Gapped) 호환성: `--offline` 빌드로 네트워크 fetch 없이도
+  # 워크스페이스가 빌드되는지 검증합니다. 의존성은 사전에 한 번만 받아오고,
+  # 그 이후의 `--offline` 단계가 통과해야 진짜 폐쇄망 배포 가능 상태입니다.
+  #
+  # 참고:
+  #   - `lumen-zkml` 의 `halo2` feature 는 v0.4 에서 제거되었습니다.
+  #   - `lumen-inference` 의 `candle` feature 도 v0.4 에서 제거되었습니다
+  #     (`tokenizers` / `rand_core` 등 외부 의존 트리 정리). 도구 라우팅용
+  #     토크나이저는 자체 구현 `lumen_inference::BpeTokenizer` 를 사용합니다.
   # ---------------------------------------------------------------------------
-  features:
-    name: optional features (candle)
+  air-gapped:
+    name: air-gapped (--offline)
     needs: image
     runs-on: ubuntu-latest
     container:
@@ -139,8 +145,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
-      - name: cargo build --features candle
-        run: cargo build -p lumen-inference --features candle --locked
+      - name: cargo fetch (online, one-shot)
+        run: cargo fetch --locked
+      - name: cargo build --offline (default features)
+        run: cargo build --workspace --all-targets --locked --offline
+      - name: cargo build --offline (no default features)
+        run: cargo build --workspace --no-default-features --locked --offline
+      - name: cargo test --offline
+        run: cargo test --workspace --locked --offline
 
   # ---------------------------------------------------------------------------
   # Lint: clippy + rustfmt.
