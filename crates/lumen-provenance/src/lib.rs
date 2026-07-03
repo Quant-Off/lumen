@@ -63,20 +63,31 @@ pub fn verify_model(
         )));
     }
 
-    if let (Some(sig), Some(signer)) = (&manifest.signature, &manifest.signer) {
-        let body = manifest.signing_payload()?;
-        let mut accepted = false;
-        for trusted in trusted_signers {
-            if trusted == signer && trusted.verify(&body, sig).is_ok() {
-                accepted = true;
-                break;
+    // trusted_signers 가 비어있지 않다면 매니페스트는 반드시 서명되어
+    // 있어야 합니다 - 이전 구현은 None 매니페스트를 silently skip 하여
+    // 미서명 모델이 hash 매칭만으로 통과될 수 있는 결함이 있었습니다.
+    match (&manifest.signature, &manifest.signer) {
+        (Some(sig), Some(signer)) => {
+            let body = manifest.signing_payload()?;
+            let mut accepted = false;
+            for trusted in trusted_signers {
+                if trusted == signer && trusted.verify(&body, sig).is_ok() {
+                    accepted = true;
+                    break;
+                }
+            }
+            if !accepted {
+                return Err(Error::Provenance(
+                    "signature did not verify against any trusted signer".into(),
+                ));
             }
         }
-        if !accepted {
+        _ if !trusted_signers.is_empty() => {
             return Err(Error::Provenance(
-                "signature did not verify against any trusted signer".into(),
+                "manifest is unsigned but trusted signers were configured".into(),
             ));
         }
+        _ => {}
     }
 
     match manifest.format {

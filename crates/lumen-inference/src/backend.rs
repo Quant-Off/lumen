@@ -8,14 +8,16 @@
 //! | 백엔드             | feature      | 설명                                 |
 //! |--------------------|--------------|--------------------------------------|
 //! | `Dummy`            | *(없음)*     | 결정론적 패턴 매칭, 테스트 전용.      |
-//! | `CandleOnnx`       | `candle`     | ONNX 라우팅 (기존 `CandleEngine`).   |
-//! | `CandleLlm`        | `candle-llm` | GGUF LLM (candle-transformers).      |
-//! | `LlamaCpp`         | `llama-cpp`  | llama.cpp 스텁 (v0.5 완성 예정).     |
+//! | `LlamaCpp`         | `llama-cpp`  | llama.cpp 연동 (v0.5 완성 예정).     |
+//!
+//! `candle` (candle-core / candle-onnx) 백엔드는 폐쇄형 환경 호환을 위해
+//! v0.4 에서 제거되었습니다. ONNX 도구 라우팅이 필요한 경우 자체 BPE
+//! 토크나이저 + 호스트 TEE 의 추론 서비스로 [`crate::ChannelEngine`] 을
+//! 통해 forward 하는 경로를 사용하세요. 전체 LLM 텍스트 생성은 `llama-cpp`
+//! 백엔드를 사용하세요.
 
-#[cfg(any(feature = "candle", feature = "candle-llm", feature = "llama-cpp"))]
+#[cfg(feature = "llama-cpp")]
 use crate::loader::VerifiedModelHandle;
-#[cfg(feature = "candle-llm")]
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use lumen_core::Result;
@@ -27,28 +29,6 @@ use crate::{DummyEngine, InferenceEngine};
 pub enum BackendConfig {
     /// 테스트 및 데모용 결정론적 패턴-매칭 엔진.
     Dummy,
-
-    /// ONNX 모델 기반 도구 라우팅 엔진.
-    ///
-    /// `candle` feature 가 활성화되어야 합니다.
-    #[cfg(feature = "candle")]
-    CandleOnnx {
-        /// 검증된 `.onnx` 모델 핸들.
-        handle: VerifiedModelHandle,
-        /// argmax 인덱스 → ToolId 매핑 테이블.
-        tool_table: Vec<lumen_core::ToolId>,
-    },
-
-    /// GGUF 양자화 LLM (candle-transformers 기반).
-    ///
-    /// `candle-llm` feature 가 활성화되어야 합니다.
-    #[cfg(feature = "candle-llm")]
-    CandleLlm {
-        /// 검증된 `.gguf` 모델 핸들.
-        handle: VerifiedModelHandle,
-        /// HuggingFace `tokenizer.json` 경로.
-        tokenizer_path: PathBuf,
-    },
 
     /// llama.cpp 기반 엔진 (v0.5 완성 예정).
     ///
@@ -71,24 +51,6 @@ pub enum BackendConfig {
 pub fn create_engine(config: BackendConfig) -> Result<Arc<dyn InferenceEngine>> {
     match config {
         BackendConfig::Dummy => Ok(Arc::new(DummyEngine::new())),
-
-        #[cfg(feature = "candle")]
-        BackendConfig::CandleOnnx { handle, tool_table } => {
-            use crate::candle::CandleEngine;
-            Ok(Arc::new(CandleEngine::load(handle.path(), tool_table)?))
-        }
-
-        #[cfg(feature = "candle-llm")]
-        BackendConfig::CandleLlm {
-            handle,
-            tokenizer_path,
-        } => {
-            use crate::candle_llm::CandleLlmEngine;
-            Ok(Arc::new(CandleLlmEngine::from_gguf(
-                &handle,
-                tokenizer_path,
-            )?))
-        }
 
         #[cfg(feature = "llama-cpp")]
         BackendConfig::LlamaCpp {

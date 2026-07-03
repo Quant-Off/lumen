@@ -2,7 +2,7 @@
 #
 # Lumen CI 베이스 이미지.
 #
-# 모든 GitHub Actions 잡(`build-test`, `features`, `lint`, `docs`, `deny`,
+# 모든 GitHub Actions 잡(`build-test`, `air-gapped`, `lint`, `docs`, `deny`,
 # `audit`)이 이 컨테이너 안에서 실행되어 toolchain·시스템 의존성·사전 설치된
 # cargo 도구를 동일하게 사용합니다. 이 파일·`rust-toolchain.toml`이 변경되면
 # `.github/workflows/ci.yml` 의 `image` 잡이 자동으로 새 태그를 빌드/푸시합니다.
@@ -12,10 +12,13 @@
 FROM rust:1.93-bookworm
 
 # 워크스페이스 빌드에 필요한 시스템 패키지.
-# - protobuf-compiler : `lumen-inference` 의 candle / candle-onnx 빌드 의존성
 # - cmake / build-essential / pkg-config / libssl-dev :
-#   일부 native crate (wasmtime / cranelift / 향후 dep) 의 보편적 빌드 요구
+#   일부 native crate (wasmtime / cranelift / 향후 llama.cpp 등) 의
+#   보편적 빌드 요구
 # - git : cargo-deny advisory DB fetch 및 일부 build script 가 사용
+#
+# 참고: 과거에는 `protobuf-compiler` 도 설치했으나 candle / candle-onnx
+#       제거(v0.4)로 더 이상 필요하지 않습니다.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -23,7 +26,6 @@ RUN apt-get update \
         cmake \
         pkg-config \
         libssl-dev \
-        protobuf-compiler \
         git \
     && rm -rf /var/lib/apt/lists/*
 

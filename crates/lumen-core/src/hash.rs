@@ -1,11 +1,15 @@
 //! Lumen 전체에서 사용되는 BLAKE3 기반 해시 프리미티브.
+//!
+//! 폐쇄형(Air-Gapped) iso-light-k0 환경 호환을 위해 구현체는
+//! `elib-k0-nt/blake` 의 [`Blake3`] 를 사용합니다. 외부 `blake3` 크레이트
+//! 의존을 제거합니다.
 
 use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
 
+use elib_blake::Blake3;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use subtle::ConstantTimeEq;
 
 use crate::error::{Error, Result};
 
@@ -19,7 +23,9 @@ pub struct Blake3Hash(pub [u8; 32]);
 impl Blake3Hash {
     /// 주어진 byte 슬라이스에 대해 해시를 계산합니다.
     pub fn of(bytes: &[u8]) -> Self {
-        Self(*blake3::hash(bytes).as_bytes())
+        let mut hasher = Blake3::new();
+        hasher.update(bytes);
+        Self(finalize_32(hasher))
     }
 
     /// 디스크의 파일을 스트리밍으로 점진적으로 해시합니다.
@@ -29,7 +35,7 @@ impl Blake3Hash {
     pub fn of_file(path: &Path) -> std::io::Result<Self> {
         use std::io::Read;
         let mut file = std::fs::File::open(path)?;
-        let mut hasher = blake3::Hasher::new();
+        let mut hasher = Blake3::new();
         let mut buf = [0u8; 64 * 1024];
         loop {
             let n = file.read(&mut buf)?;
@@ -38,7 +44,7 @@ impl Blake3Hash {
             }
             hasher.update(&buf[..n]);
         }
-        Ok(Self(*hasher.finalize().as_bytes()))
+        Ok(Self(finalize_32(hasher)))
     }
 
     /// 원시 바이트 차용.
@@ -54,7 +60,8 @@ impl Blake3Hash {
 
 impl PartialEq for Blake3Hash {
     fn eq(&self, other: &Self) -> bool {
-        self.0.ct_eq(&other.0).into()
+        // elib-k0-nt/constant-time 의 상수시간 슬라이스 비교.
+        elib_blake::ct_eq_slice(&self.0, &other.0).unwrap_u8() == 1
     }
 }
 
@@ -134,6 +141,29 @@ pub fn hash_postcard<T: Serialize>(value: &T) -> Result<Blake3Hash> {
     Ok(Blake3Hash::of(&bytes))
 }
 
+/// `Blake3` 해시를 32 바이트 배열로 종결합니다.
+///
+/// elib-k0-nt 의 `finalize` 는 메모리 보안을 위해 `SecureBuffer` 를 반환합니다.
+/// Lumen 의 식별자는 short-lived 한 32 바이트 다이제스트이므로 즉시 일반 배열로
+/// 복사해 사용합니다 (`SecureBuffer` 는 함수 종료와 동시에 zeroize 됨).
+fn finalize_32(hasher: Blake3) -> [u8; 32] {
+    let buf = hasher.finalize().expect("blake3 finalize failed");
+    let mut out = [0u8; 32];
+    out.copy_from_slice(buf.as_slice());
+    out
+}
+
+/// `(key, label, epoch_le_bytes)` 트리플로 32 바이트 키 자료를 도출합니다.
+///
+/// `lumen-channel` 의 키 도출에서 사용됩니다. BLAKE3 keyed 모드는
+/// `key` 자체를 IV 로 사용하므로 키 바이트가 누설되지 않습니다.
+pub fn blake3_keyed_derive_32(key: &[u8; 32], label: &[u8], extra: &[u8]) -> [u8; 32] {
+    let mut hasher = Blake3::new_keyed(key);
+    hasher.update(label);
+    hasher.update(extra);
+    finalize_32(hasher)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,5 +186,14 @@ mod tests {
     #[test]
     fn distinct_inputs_distinct_hashes() {
         assert_ne!(Blake3Hash::of(b"a"), Blake3Hash::of(b"b"));
+    }
+
+    #[test]
+    fn keyed_derive_distinct_for_different_keys() {
+        let k1 = [1u8; 32];
+        let k2 = [2u8; 32];
+        let a = blake3_keyed_derive_32(&k1, b"label", b"");
+        let b = blake3_keyed_derive_32(&k2, b"label", b"");
+        assert_ne!(a, b);
     }
 }

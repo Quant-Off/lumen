@@ -44,6 +44,16 @@ pub const SOFTWARE_HELLO_MARKER: &str = "lumen.attested.v1";
 /// 활성화됩니다.
 pub const TEE_HELLO_MARKER: &str = "lumen.attested-tee.v1";
 
+/// 핸드셰이크 Hello 서명 도메인 분리 prefix.
+///
+/// 같은 Ed25519 신원 키가 capability / manifest / 데이터 프레임 서명에도
+/// 사용되므로, 다른 프로토콜의 서명을 Hello 서명으로 재사용하는 cross-
+/// protocol replay 를 차단하기 위한 prefix 입니다.
+const HELLO_SIGN_DOMAIN: &[u8] = b"lumen.attested.hello.v1";
+
+/// 데이터 프레임 서명 도메인 분리 prefix.
+const FRAME_SIGN_DOMAIN: &[u8] = b"lumen.attested.frame.v1";
+
 /// 서명되는 핸드셰이크 평문 페이로드.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Hello {
@@ -158,9 +168,7 @@ impl<C: SecureChannel> AttestedChannel<C> {
             nonce,
             attestation_doc,
         };
-        let hello_bytes =
-            postcard::to_allocvec(&hello).map_err(|e| Error::Decode(format!("hello: {e}")))?;
-        let signature = sk.sign(&hello_bytes);
+        let signature = sk.sign(&hello_signing_payload(&hello)?);
         let signed = SignedHello {
             hello: hello.clone(),
             signature,
@@ -184,9 +192,7 @@ impl<C: SecureChannel> AttestedChannel<C> {
                 "attested: peer hello 의 수신자가 우리 ID 가 아님".into(),
             ));
         }
-        let peer_bytes = postcard::to_allocvec(&peer.hello)
-            .map_err(|e| Error::Decode(format!("peer hello: {e}")))?;
-        peer_vk.verify(&peer_bytes, &peer.signature)?;
+        peer_vk.verify(&hello_signing_payload(&peer.hello)?, &peer.signature)?;
 
         // TEE 변종: peer attestation 문서 형식 + measurement 핀 검증.
         if marker == TEE_HELLO_MARKER {
@@ -234,9 +240,7 @@ impl<C: SecureChannel> SecureChannel for AttestedChannel<C> {
             seq: self.next_send_seq,
             payload: bytes,
         };
-        let frame_bytes = postcard::to_allocvec(&frame)
-            .map_err(|e| Error::Decode(format!("frame encode: {e}")))?;
-        let signature = self.sk.sign(&frame_bytes);
+        let signature = self.sk.sign(&frame_signing_payload(&frame)?);
         let signed = SignedFrame { frame, signature };
         self.inner.send(&signed).await?;
         self.next_send_seq = self
@@ -248,9 +252,10 @@ impl<C: SecureChannel> SecureChannel for AttestedChannel<C> {
 
     async fn recv_bytes(&mut self) -> Result<Vec<u8>> {
         let signed: SignedFrame = self.inner.recv().await?;
-        let frame_bytes = postcard::to_allocvec(&signed.frame)
-            .map_err(|e| Error::Decode(format!("frame decode: {e}")))?;
-        self.peer_vk.verify(&frame_bytes, &signed.signature)?;
+        // epoch / seq 를 먼저 빠르게 거부 - 적대적 가비지 위에서 ed25519
+        // 검증을 낭비하지 않습니다. AEAD 가 없는 attested 변종에서도 위
+        // 두 검사는 인증에 영향을 주지 않으며 실제 신원 검증은 아래
+        // peer_vk.verify 가 담당합니다.
         if signed.frame.epoch != self.epoch {
             return Err(Error::Channel(format!(
                 "attested: epoch mismatch (expected {}, got {})",
@@ -263,6 +268,8 @@ impl<C: SecureChannel> SecureChannel for AttestedChannel<C> {
                 self.next_recv_seq, signed.frame.seq
             )));
         }
+        self.peer_vk
+            .verify(&frame_signing_payload(&signed.frame)?, &signed.signature)?;
         self.next_recv_seq = self
             .next_recv_seq
             .checked_add(1)
@@ -271,10 +278,28 @@ impl<C: SecureChannel> SecureChannel for AttestedChannel<C> {
     }
 }
 
+/// `(HELLO_SIGN_DOMAIN || postcard(hello))` 정규 서명 페이로드.
+fn hello_signing_payload(hello: &Hello) -> Result<Vec<u8>> {
+    let body = postcard::to_allocvec(hello).map_err(|e| Error::Decode(format!("hello: {e}")))?;
+    let mut out = Vec::with_capacity(HELLO_SIGN_DOMAIN.len() + body.len());
+    out.extend_from_slice(HELLO_SIGN_DOMAIN);
+    out.extend_from_slice(&body);
+    Ok(out)
+}
+
+/// `(FRAME_SIGN_DOMAIN || postcard(frame))` 정규 서명 페이로드.
+fn frame_signing_payload(frame: &DataFrame) -> Result<Vec<u8>> {
+    let body = postcard::to_allocvec(frame).map_err(|e| Error::Decode(format!("frame: {e}")))?;
+    let mut out = Vec::with_capacity(FRAME_SIGN_DOMAIN.len() + body.len());
+    out.extend_from_slice(FRAME_SIGN_DOMAIN);
+    out.extend_from_slice(&body);
+    Ok(out)
+}
+
 fn random_nonce() -> [u8; 16] {
-    use rand::RngCore;
+    use lumen_core::rng::{OsRng, Rng};
     let mut n = [0u8; 16];
-    rand::rngs::OsRng.fill_bytes(&mut n);
+    OsRng.fill_bytes(&mut n);
     n
 }
 
@@ -290,7 +315,7 @@ mod tests {
         AttestedChannel<crate::inproc::InProcChannel>,
         AttestedChannel<crate::inproc::InProcChannel>,
     ) {
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = lumen_core::rng::OsRng;
         let sk_a = SigningKey::generate(&mut rng);
         let sk_b = SigningKey::generate(&mut rng);
         let vk_a = sk_a.verifying_key();
@@ -327,7 +352,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_with_wrong_peer_fails() {
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = lumen_core::rng::OsRng;
         let sk_a = SigningKey::generate(&mut rng);
         let sk_b = SigningKey::generate(&mut rng);
         let sk_c = SigningKey::generate(&mut rng); // attacker
@@ -373,7 +398,7 @@ mod tests {
     async fn tampered_payload_rejected() {
         // We can't easily tamper without breaking the abstraction; instead,
         // wire two pairs and inject a different signer's frame.
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = lumen_core::rng::OsRng;
         let sk_a = SigningKey::generate(&mut rng);
         let sk_b = SigningKey::generate(&mut rng);
         let sk_evil = SigningKey::generate(&mut rng);
@@ -407,7 +432,7 @@ mod tests {
         doc_b[144..192].fill(0x22);
         let pin_b = vec![0x22u8; 48];
 
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = lumen_core::rng::OsRng;
         let sk_a = SigningKey::generate(&mut rng);
         let sk_b = SigningKey::generate(&mut rng);
         let vk_a = sk_a.verifying_key();
@@ -443,7 +468,7 @@ mod tests {
         // A 가 기대하는 pin 은 0xAA 인데 실제 B 는 0x22 -> 불일치.
         let bad_pin = vec![0xAAu8; 48];
 
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = lumen_core::rng::OsRng;
         let sk_a = SigningKey::generate(&mut rng);
         let sk_b = SigningKey::generate(&mut rng);
         let vk_a = sk_a.verifying_key();
@@ -465,7 +490,7 @@ mod tests {
         let mut doc = vec![0u8; 1184];
         doc[0..4].copy_from_slice(&2u32.to_le_bytes());
 
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = lumen_core::rng::OsRng;
         let sk_a = SigningKey::generate(&mut rng);
         let sk_b = SigningKey::generate(&mut rng);
         let vk_a = sk_a.verifying_key();

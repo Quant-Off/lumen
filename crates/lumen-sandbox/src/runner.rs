@@ -72,8 +72,8 @@ impl Sandbox {
 mod tests {
     use super::*;
     use lumen_capability::PolicyEngine;
+    use lumen_core::rng::OsRng;
     use lumen_core::{AgentId, SigningKey, Timestamp};
-    use rand::rngs::OsRng;
 
     const LOG_ONLY_WAT: &str = r#"
         (module

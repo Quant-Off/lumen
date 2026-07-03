@@ -24,15 +24,20 @@
 //! 아닙니다. attested 채널은 무결성 + 신원 + 리플레이 저항을 제공하지만
 //! **기밀성** 은 없습니다. 이 모듈은 동일한 ed25519 핀을 재사용해 KEX 를
 //! 인증하면서 기밀성을 추가합니다.
+//!
+//! 폐쇄형(Air-Gapped) iso-light-k0 마이크로커널 환경 호환을 위해 모든
+//! 암호 프리미티브는 `elib-k0-nt` 모듈을 사용합니다 - AES-GCM 은
+//! `elib-k0-nt/aes::AES256GCM`, ECDH 는 `elib-k0-nt/x25519`, KDF 는
+//! `lumen_core::hash::blake3_keyed_derive_32` (BLAKE3 keyed 모드).
 
-use aes_gcm::aead::{Aead, KeyInit, Payload};
-use aes_gcm::{Aes256Gcm, Key, Nonce};
 use async_trait::async_trait;
+use elib_aes::{AES256GCM, GCM_NONCE_SIZE, GCM_TAG_SIZE};
+use elib_x25519::{PublicKey as X25519Public, SecretKey as X25519Secret};
+use elib_zeroize::Zeroize;
+use lumen_core::hash::blake3_keyed_derive_32;
+use lumen_core::rng::{OsRng, Rng};
 use lumen_core::{Error, Result, Signature, SigningKey, VerifyingKey};
-use rand::rngs::OsRng;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use x25519_dalek::{EphemeralSecret, PublicKey as X25519Public};
 
 use crate::SecureChannel;
 
@@ -74,7 +79,8 @@ struct SignedEncryptedHello {
 struct EncryptedFrame {
     /// 송신 측 카운터; 수신 측은 정확히 다음 기대값과 일치해야 합니다.
     seq: u64,
-    /// AEAD 출력 (ciphertext || tag).
+    /// AEAD 출력 (ciphertext || tag) - 외부 와이어 호환을 위해 elib-k0-nt
+    /// 의 (ciphertext, tag) 쌍을 단일 바이트열로 직렬화한 것.
     ciphertext: Vec<u8>,
 }
 
@@ -85,9 +91,9 @@ struct EncryptedFrame {
 pub struct EncryptedChannel<C: SecureChannel> {
     inner: C,
     /// 송신용 키 (자기 → 피어).
-    tx_cipher: Aes256Gcm,
+    tx_cipher: AES256GCM,
     /// 수신용 키 (피어 → 자기).
-    rx_cipher: Aes256Gcm,
+    rx_cipher: AES256GCM,
     /// 자신의 역할 (initiator=0, responder=1) - nonce 첫 바이트로 사용.
     my_role: u8,
     /// 피어의 역할 - 수신 시 nonce 검증.
@@ -134,8 +140,15 @@ impl<C: SecureChannel> EncryptedChannel<C> {
         my_role: u8,
     ) -> Result<Self> {
         let my_vk = sk.verifying_key();
-        let my_eph = EphemeralSecret::random_from_rng(OsRng);
-        let my_eph_pub = X25519Public::from(&my_eph);
+
+        // 임시 x25519 키 + 16 바이트 핸드셰이크 nonce 를 OS 엔트로피에서 생성.
+        // eph_seed 는 X25519Secret 으로 흡수된 직후 zeroize 하여 forensic
+        // 메모리 덤프에서 ephemeral 비밀이 회수되지 않도록 합니다.
+        let mut eph_seed = [0u8; 32];
+        OsRng.fill_bytes(&mut eph_seed);
+        let my_eph = X25519Secret::from_bytes(eph_seed);
+        eph_seed.zeroize();
+        let my_eph_pub = my_eph.public_key();
         let mut nonce16 = [0u8; 16];
         OsRng.fill_bytes(&mut nonce16);
 
@@ -183,20 +196,34 @@ impl<C: SecureChannel> EncryptedChannel<C> {
         peer_vk.verify(&peer_payload, &peer.signature)?;
 
         // x25519 ECDH.
-        let peer_x25519 = X25519Public::from(peer.hello.ephemeral_x25519);
+        let peer_x25519 = X25519Public::from_bytes(peer.hello.ephemeral_x25519);
         let shared = my_eph.diffie_hellman(&peer_x25519);
+
+        // RFC 7748 권고: 모든 비트가 0 인 공유 비밀은 비여직성(non-contributory)
+        // 키 합의를 의미하므로 거부합니다.
+        if shared.is_zero() {
+            return Err(Error::Crypto(
+                "encrypted: x25519 produced all-zero shared secret".into(),
+            ));
+        }
 
         // 디렉션별 키 도출. initiator → responder 와 responder → initiator
         // 두 개를 만들고, 자신의 송신/수신을 그에 매핑합니다.
-        let key_i2r = derive_key(shared.as_bytes(), KDF_LABEL_INITIATOR, epoch);
-        let key_r2i = derive_key(shared.as_bytes(), KDF_LABEL_RESPONDER, epoch);
-        let (tx_key, rx_key, peer_role) = if my_role == 0 {
+        // AES256GCM 이 키를 라운드키로 확장한 직후 원본 32 바이트 사본을
+        // zeroize 하여 스택 잔류 비밀을 최소화합니다.
+        let mut key_i2r = derive_key(shared.as_bytes(), KDF_LABEL_INITIATOR, epoch);
+        let mut key_r2i = derive_key(shared.as_bytes(), KDF_LABEL_RESPONDER, epoch);
+        let (mut tx_key, mut rx_key, peer_role) = if my_role == 0 {
             (key_i2r, key_r2i, 1u8)
         } else {
             (key_r2i, key_i2r, 0u8)
         };
-        let tx_cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&tx_key));
-        let rx_cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&rx_key));
+        let tx_cipher = AES256GCM::new(&tx_key);
+        let rx_cipher = AES256GCM::new(&rx_key);
+        tx_key.zeroize();
+        rx_key.zeroize();
+        key_i2r.zeroize();
+        key_r2i.zeroize();
 
         Ok(Self {
             inner,
@@ -226,16 +253,13 @@ impl<C: SecureChannel> SecureChannel for EncryptedChannel<C> {
     async fn send_bytes(&mut self, bytes: Vec<u8>) -> Result<()> {
         let nonce = build_nonce(self.my_role, self.next_send_seq);
         let aad = aad_bytes(self.epoch, self.my_role);
-        let ciphertext = self
-            .tx_cipher
-            .encrypt(
-                Nonce::from_slice(&nonce),
-                Payload {
-                    msg: &bytes,
-                    aad: &aad,
-                },
-            )
-            .map_err(|e| Error::Crypto(format!("aes-gcm seal: {e}")))?;
+        let mut ciphertext = vec![0u8; bytes.len()];
+        let mut tag = [0u8; GCM_TAG_SIZE];
+        self.tx_cipher
+            .encrypt(&nonce, &aad, &bytes, &mut ciphertext, &mut tag);
+        // 와이어 포맷: ciphertext || tag (구버전 aes-gcm 0.10 호환).
+        ciphertext.extend_from_slice(&tag);
+
         let frame = EncryptedFrame {
             seq: self.next_send_seq,
             ciphertext,
@@ -256,18 +280,26 @@ impl<C: SecureChannel> SecureChannel for EncryptedChannel<C> {
                 self.next_recv_seq, frame.seq
             )));
         }
+        if frame.ciphertext.len() < GCM_TAG_SIZE {
+            return Err(Error::Crypto(
+                "encrypted: frame shorter than GCM tag".into(),
+            ));
+        }
         let nonce = build_nonce(self.peer_role, frame.seq);
         let aad = aad_bytes(self.epoch, self.peer_role);
-        let plaintext = self
+        let split = frame.ciphertext.len() - GCM_TAG_SIZE;
+        let (ct, tag_slice) = frame.ciphertext.split_at(split);
+        let mut tag = [0u8; GCM_TAG_SIZE];
+        tag.copy_from_slice(tag_slice);
+        let mut plaintext = vec![0u8; ct.len()];
+        let ok = self
             .rx_cipher
-            .decrypt(
-                Nonce::from_slice(&nonce),
-                Payload {
-                    msg: &frame.ciphertext,
-                    aad: &aad,
-                },
-            )
-            .map_err(|_| Error::Crypto("encrypted: AEAD authentication failed".into()))?;
+            .decrypt(&nonce, &aad, ct, &tag, &mut plaintext);
+        if !ok {
+            return Err(Error::Crypto(
+                "encrypted: AEAD authentication failed".into(),
+            ));
+        }
         self.next_recv_seq = self
             .next_recv_seq
             .checked_add(1)
@@ -287,16 +319,11 @@ fn signing_payload(hello: &EncryptedHello) -> Result<Vec<u8>> {
 
 fn derive_key(shared: &[u8; 32], label: &[u8], epoch: u64) -> [u8; 32] {
     // BLAKE3 keyed-hash 로 (shared || label || epoch) → 32-byte key.
-    let mut hasher = blake3::Hasher::new_keyed(shared);
-    hasher.update(label);
-    hasher.update(&epoch.to_le_bytes());
-    let mut out = [0u8; 32];
-    out.copy_from_slice(hasher.finalize().as_bytes());
-    out
+    blake3_keyed_derive_32(shared, label, &epoch.to_le_bytes())
 }
 
-fn build_nonce(role: u8, seq: u64) -> [u8; 12] {
-    let mut n = [0u8; 12];
+fn build_nonce(role: u8, seq: u64) -> [u8; GCM_NONCE_SIZE] {
+    let mut n = [0u8; GCM_NONCE_SIZE];
     n[0] = role;
     // n[1..4] 은 0 으로 둡니다 - 카운터 오버플로 시 명시적 거부.
     n[4..12].copy_from_slice(&seq.to_le_bytes());
@@ -321,7 +348,7 @@ mod tests {
         EncryptedChannel<crate::inproc::InProcChannel>,
         EncryptedChannel<crate::inproc::InProcChannel>,
     )> {
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = OsRng;
         let sk_a = SigningKey::generate(&mut rng);
         let sk_b = SigningKey::generate(&mut rng);
         let vk_a = sk_a.verifying_key();
@@ -373,7 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_with_wrong_peer_pin_fails() {
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = OsRng;
         let sk_a = SigningKey::generate(&mut rng);
         let sk_b = SigningKey::generate(&mut rng);
         let sk_c = SigningKey::generate(&mut rng); // 공격자
@@ -394,7 +421,7 @@ mod tests {
 
     #[tokio::test]
     async fn epoch_mismatch_rejected() {
-        let mut rng = rand::rngs::OsRng;
+        let mut rng = OsRng;
         let sk_a = SigningKey::generate(&mut rng);
         let sk_b = SigningKey::generate(&mut rng);
         let vk_a = sk_a.verifying_key();

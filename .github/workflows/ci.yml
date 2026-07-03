@@ -12,7 +12,15 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
+  # Q. T. Felix NOTE: 과거에는 `RUSTFLAGS: -D warnings` 를 워크플로우 전역으로
+  #                   걸었으나, 이 환경변수는 워크스페이스 외부 path dep
+  #                   (`../elib-k0-nt/*`) 컴파일에도 그대로 적용되어 외부
+  #                   레포의 사소한 dead_code 경고가 lumen CI 를 깨뜨리는
+  #                   문제가 있었습니다. 동등한 게이트는 이제 워크스페이스
+  #                   `[workspace.lints.rust]` 의 `warnings = "deny"` 로
+  #                   lumen 멤버에만 한정해 적용됩니다. clippy 게이트는
+  #                   여전히 `cargo clippy ... -- -D warnings` 로 수행하며,
+  #                   이 인자는 primary package (lumen 멤버) 에만 적용됩니다.
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -77,6 +85,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
       - name: cargo build
         run: cargo build --workspace --all-targets --locked
@@ -98,6 +107,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-deps
       - name: install protoc
         run: brew install protobuf
       - uses: Swatinem/rust-cache@v2
@@ -112,10 +122,18 @@ jobs:
         run: cargo build --release --target wasm32-unknown-unknown --locked
 
   # ---------------------------------------------------------------------------
-  # 무거운 optional features (halo2, candle).
+  # 폐쇄 환경(Air-Gapped) 호환성: `--offline` 빌드로 네트워크 fetch 없이도
+  # 워크스페이스가 빌드되는지 검증합니다. 의존성은 사전에 한 번만 받아오고,
+  # 그 이후의 `--offline` 단계가 통과해야 진짜 폐쇄망 배포 가능 상태입니다.
+  #
+  # 참고:
+  #   - `lumen-zkml` 의 `halo2` feature 는 v0.4 에서 제거되었습니다.
+  #   - `lumen-inference` 의 `candle` feature 도 v0.4 에서 제거되었습니다
+  #     (`tokenizers` / `rand_core` 등 외부 의존 트리 정리). 도구 라우팅용
+  #     토크나이저는 자체 구현 `lumen_inference::BpeTokenizer` 를 사용합니다.
   # ---------------------------------------------------------------------------
-  features:
-    name: optional features (halo2, candle)
+  air-gapped:
+    name: air-gapped (--offline)
     needs: image
     runs-on: ubuntu-latest
     container:
@@ -125,13 +143,16 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
-      - name: cargo build --features halo2
-        run: cargo build -p lumen-zkml --features halo2 --locked
-      - name: cargo test --features halo2
-        run: cargo test -p lumen-zkml --features halo2 --locked
-      - name: cargo build --features candle
-        run: cargo build -p lumen-inference --features candle --locked
+      - name: cargo fetch (online, one-shot)
+        run: cargo fetch --locked
+      - name: cargo build --offline (default features)
+        run: cargo build --workspace --all-targets --locked --offline
+      - name: cargo build --offline (no default features)
+        run: cargo build --workspace --no-default-features --locked --offline
+      - name: cargo test --offline
+        run: cargo test --workspace --locked --offline
 
   # ---------------------------------------------------------------------------
   # Lint: clippy + rustfmt.
@@ -147,6 +168,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -167,6 +189,7 @@ jobs:
       RUSTDOCFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --workspace --no-deps --document-private-items
 
@@ -184,6 +207,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-deps
       - run: cargo deny check
 
   # ---------------------------------------------------------------------------
@@ -200,4 +224,5 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/checkout-deps
       - run: cargo audit

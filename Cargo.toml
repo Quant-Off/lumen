@@ -51,12 +51,14 @@ toml = "0.8"
 postcard = { version = "1", default-features = false, features = ["use-std"] }
 hex = "0.4"
 
-# Crypto
-blake3 = "1"
-ed25519-dalek = { version = "2", features = ["rand_core"] }
-rand = "0.8"
-rand_core = "0.6"
-subtle = "2"
+# Crypto 
+elib-blake = { package = "blake", path = "../elib-k0-nt/blake", version = "1.0.0" }
+elib-ed25519 = { package = "ed25519", path = "../elib-k0-nt/ed25519", version = "1.0.0" }
+elib-x25519 = { package = "x25519", path = "../elib-k0-nt/x25519", version = "1.0.0" }
+elib-aes = { package = "aes", path = "../elib-k0-nt/aes", version = "1.0.0" }
+elib-rng = { package = "rng", path = "../elib-k0-nt/rng", version = "1.0.0" }
+elib-constant-time = { package = "constant-time", path = "../elib-k0-nt/constant-time", version = "1.0.0" }
+elib-zeroize = { package = "zeroize", path = "../elib-k0-nt/zeroize", version = "1.0.0" }
 
 # Defense / matchers
 aho-corasick = "1"
@@ -68,12 +70,13 @@ globset = "0.4"
 parking_lot = "0.12"
 
 # WASM (sandbox)
-# v25 → 최신 line. RUSTSEC 다수 advisory (fd_renumber / wasi:http fields /
+# v25 -> 최신 line. RUSTSEC 다수 advisory (fd_renumber / wasi:http fields /
 # 컴포넌트 model flags lift / Winch table.fill / UTF-16 transcoding panic) 패치 포함.
 wasmtime = { version = "44", default-features = false, features = ["async", "cranelift", "runtime", "addr2line", "demangle"] }
 wat = "1"
 
-# Provenance — candle-onnx 가 0.7 을 끌어오므로 동일 메이저로 정렬해 dup 회피.
+# Provenance — Hugging Face safetensors 헤더 sniff 용. 단독으로 동작하는
+# 작은 크레이트라 폐쇄망 빌드에 무리 없이 포함됩니다.
 safetensors = "0.7"
 
 # CLI
@@ -83,28 +86,35 @@ clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
-# Optional crypto-channel feature
-aes-gcm = "0.10"
-x25519-dalek = { version = "2", features = ["static_secrets"] }
+# Q. T. Felix NOTE: AES-GCM / x25519는 elib-k0-nt 모듈을 사용하므로 별도 외부
+#                   크레이트가 필요하지 않음(위 elib-aes / elib-x25519 워크스페이스 정의 사용)
 
 # Dev / bench
 criterion = "0.5"
 
-# halo2 (ZK 회로) - 매우 무거운 의존성. feature 뒤에서만 활성화.
-halo2_proofs = "0.3"
-ff = "0.13"
-pasta_curves = "0.5"
-
-# candle (LLM 추론) - feature 뒤에서만 활성화. CPU 전용 빌드.
-candle-core = { version = "0.10", default-features = false }
-candle-onnx = { version = "0.10", default-features = false }
-# candle-transformers: 실제 LLM 아키텍처 (LLaMA, Mistral, GPT-2 등). CPU 전용.
-candle-transformers = { version = "0.10", default-features = false }
-# HuggingFace 토크나이저 (tokenizer.json 형식).
-# onig 는 C 소스에서 빌드되므로 시스템 라이브러리 불필요.
-tokenizers = { version = "0.19" }
+# 참고: 다음 의존성은 폐쇄형(Air-Gapped) 호환성 작업으로 제거되었습니다.
+#   - `halo2_proofs` / `ff` / `pasta_curves` : ZK 백엔드. mock prover 가
+#     이미 BLAKE3 기반이라 halo2 회로 없이 동작합니다. 실제 succinct ZK
+#     백엔드 (SP1 / RISC Zero 등) 는 마일스톤 재검토 시 결정.
+#   - `candle-core` / `candle-onnx` / `candle-transformers` / `tokenizers`
+#     : GGUF·ONNX 추론 백엔드. 의존 트리가 매우 크고 (`gemm`, `pulp`,
+#     `paste`, `tokenizers`, `rand_core` 등) HF Hub 다운로드 코드를
+#     포함하므로 폐쇄망에 부적합. 도구 라우팅용 토크나이저는 자체 구현인
+#     `lumen_inference::BpeTokenizer` 를 사용하고, 전체 LLM 생성은
+#     `llama-cpp` 백엔드 또는 호스트 TEE 의 ChannelEngine forward 경로를
+#     사용합니다.
+#   - `rand` / `rand_core` : `lumen_core::rng` (HashDRBG 어댑터) 로 대체.
 
 [workspace.lints.rust]
+# Q. T. Felix NOTE: 모든 경고를 deny 로 격상해 lumen 멤버 크레이트의 게이트로
+#                   사용합니다. 과거에는 CI의 `RUSTFLAGS=-D warnings`로 같은
+#                   효과를 냈으나, 그 방식은 워크스페이스 외부 path dep
+#                   (`elib-k0-nt/*`) 까지 격상시켜 외부 변경에 lumen CI가
+#                   끌려갔습니다. lints 테이블은 `[lints] workspace = true`
+#                   를 선언한 멤버에만 적용되므로 외부 path dep에 영향을
+#                   주지 않습니다. priority -2로 가장 먼저 emit시켜 이후
+#                   특정 lint(warn 레벨)가 자유롭게 덮어쓸 수 있도록 합니다.
+warnings = { level = "deny", priority = -2 }
 unsafe_code = "deny"
 missing_docs = "warn"
 unreachable_pub = "warn"
