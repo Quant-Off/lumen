@@ -9,7 +9,7 @@
 
 # 베이스: Debian Bookworm 위의 Rust stable 고정.
 # `rust-toolchain.toml` 의 채널과 일치시켜 로컬-CI 동작을 동기화합니다.
-FROM rust:1.93-bookworm
+FROM rust:1.95-bookworm
 
 # 워크스페이스 빌드에 필요한 시스템 패키지.
 # - cmake / build-essential / pkg-config / libssl-dev :

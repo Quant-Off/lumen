@@ -25,7 +25,7 @@
 //! **기밀성** 은 없습니다. 이 모듈은 동일한 ed25519 핀을 재사용해 KEX 를
 //! 인증하면서 기밀성을 추가합니다.
 //!
-//! 폐쇄형(Air-Gapped) iso-light-k0 마이크로커널 환경 호환을 위해 모든
+//! 폐쇄형(Air-Gapped) K0 마이크로커널 환경 호환을 위해 모든
 //! 암호 프리미티브는 `elib-k0-nt` 모듈을 사용합니다 - AES-GCM 은
 //! `elib-k0-nt/aes::AES256GCM`, ECDH 는 `elib-k0-nt/x25519`, KDF 는
 //! `lumen_core::hash::blake3_keyed_derive_32` (BLAKE3 keyed 모드).

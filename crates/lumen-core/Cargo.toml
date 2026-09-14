@@ -26,3 +26,5 @@ postcard.workspace = true
 
 [dev-dependencies]
 serde_json = { workspace = true }
+elib-aes.workspace = true
+elib-x25519.workspace = true

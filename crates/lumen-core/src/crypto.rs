@@ -4,7 +4,7 @@
 //! 유일한 크레이트가 되어야 합니다. Capability 토큰과 provenance 서명
 //! 모두 이 타입들을 거칩니다.
 //!
-//! 폐쇄형(Air-Gapped) iso-light-k0 환경 호환을 위해 외부 `ed25519-dalek`
+//! 폐쇄형(Air-Gapped) K0 환경 호환을 위해 외부 `ed25519-dalek`
 //! 크레이트는 모두 elib-k0-nt 모듈로 교체되었습니다.
 
 use std::fmt;

@@ -2,7 +2,7 @@
 
 > **목적**: Lumen 을 외부 네트워크가 차단된 고보안 구역(High-Side)에서
 > 빌드/테스트/배포할 수 있도록 의존성을 사전 벤더링하고 오프라인
-> 4-게이트를 통과시키는 절차를 정의합니다. iso-light-k0 마이크로커널의
+> 4-게이트를 통과시키는 절차를 정의합니다. K0 마이크로커널의
 > Ring 3 사용자공간 컴포넌트로 통합되는 시점부터 본 가이드의 절차가
 > 빌드 시스템에 강제됩니다.
 
@@ -16,7 +16,7 @@
 |-------------|------|------|
 | `blake3`, `ed25519-dalek`, `subtle`, `rand`, `rand_core`, `aes-gcm`, `x25519-dalek` | 외부 crates.io 의존, FIPS 미인증 | `elib-k0-nt/*` (in-house, 인증 경로) |
 | `halo2_proofs` + `ff` + `pasta_curves` | 타원곡선 의존성 ~30 크레이트, MockProver 는 ZK 보장 없음 | mock prover 가 BLAKE3 commitment 만 사용. succinct ZK 는 SP1/RISC Zero 마일스톤에서 재검토. |
-| `candle-transformers` + `tokenizers` | HuggingFace Hub 다운로드 코드 포함, onig C 빌드 의존 | `llama-cpp` 백엔드 (v0.5) 또는 호스트 TEE 의 `ChannelEngine` forward 경로 |
+| `candle-core` / `candle-onnx` / `candle-transformers` / `tokenizers` | HuggingFace Hub 다운로드 코드 포함, `gemm`/`pulp`/`paste` 등 무거운 native 의존 | 도구 라우팅 토크나이저는 자체 `lumen_inference::BpeTokenizer` 사용. 전체 LLM 생성은 `llama-cpp` 백엔드 (v0.5) 또는 호스트 TEE 의 `ChannelEngine` forward 경로 |
 
 자세한 사유는 [`kernel-comp.md`](kernel-comp.md) 참고.
 
@@ -31,6 +31,10 @@
 ./scripts/vendor.sh           # default features 만 (가장 가벼움)
 ./scripts/vendor.sh --all     # crypto-channel + llama-cpp 까지 포함
 ```
+
+> **참고:** v0.4 이후 `candle` feature 가 제거되어 `protoc` / `cmake` 가
+> 더 이상 필수 시스템 바이너리가 아닙니다. `cmake` 는 `llama-cpp` feature
+> 활성화 시에만 필요합니다.
 
 스크립트가 수행하는 작업:
 
@@ -54,12 +58,12 @@
 
 | 바이너리 | 활성화 조건 | 용도 |
 |----------|-------------|------|
-| `rustc` 1.85.0 + cargo | 항상 (`rust-toolchain.toml`) | Rust 컴파일러 |
-| `protoc` (Protocol Buffers) | `lumen-inference/candle` feature | `candle-onnx` 의 build script 가 빌드 시점에 호출 |
+| `rustc` 1.95.0 + cargo | 항상 (`rust-toolchain.toml`) | Rust 컴파일러 |
 | `cmake` ≥ 3.20 | `lumen-inference/llama-cpp` feature (v0.5) | llama.cpp 네이티브 라이브러리 빌드 |
 
-폐쇄망 반입 시 권장: `~/.cargo/`, `protoc` 바이너리, `cmake`, 그리고 본
-저장소(벤더링 완료 상태)를 함께 묶어 `tar.gz` 단일 번들로 전송.
+폐쇄망 반입 시 권장: `~/.cargo/`, `cmake` 바이너리(`llama-cpp` feature
+사용 시), 그리고 본 저장소(벤더링 완료 상태)를 함께 묶어 `tar.gz` 단일
+번들로 전송.
 
 ```bash
 # 온라인 측에서:
@@ -95,24 +99,21 @@ cargo fmt    --all -- --check
 # 보안 채널 (X25519 + AES-256-GCM, elib-k0-nt 백엔드)
 cargo test --offline --workspace --features lumen-channel/crypto-channel
 
-# llama.cpp 추론 백엔드 (v0.5 스텁)
+# llama.cpp 추론 백엔드 (v0.5 스텁, cmake 시스템 바이너리 필요)
 cargo test --offline --workspace --features lumen-inference/llama-cpp
-
-# ONNX 라우팅 추론 (protoc 시스템 바이너리 필요)
-cargo build --offline --workspace --features lumen-inference/candle
 ```
 
 ---
 
-## 5. iso-light-k0 마이크로커널 통합 메모
+## 5. K0 마이크로커널 통합 메모
 
-Lumen 은 iso-light-k0 의 Ring 3 사용자공간 컴포넌트로 동작합니다.
+Lumen 은 K0 의 Ring 3 사용자공간 컴포넌트로 동작합니다.
 보안 경계는 다음과 같습니다.
 
 ```
 ┌─────────────────────────── High-Side (Air-Gapped) ───────────────────────────┐
 │                                                                              │
-│  Ring 0  ┃ iso-light-k0 마이크로커널 (PSK 기반 mutual auth, TLS-PSK-PQ)        │
+│  Ring 0  ┃ K0 마이크로커널 (PSK 기반 mutual auth, TLS-PSK-PQ)        │
 │          ┃   - elib-k0-nt 암호 모듈 (FIPS 인증 경로)                          │
 │  ─────────┃─────────────────────────────────────────────────────────────────  │
 │  Ring 3  ┃ Lumen 에이전트 프레임워크 (본 저장소)                              │
@@ -126,7 +127,7 @@ Lumen 은 iso-light-k0 의 Ring 3 사용자공간 컴포넌트로 동작합니�
 **제약 사항:**
 - **Ring 0 에서 Cranelift JIT 실행 불가** — 따라서 `lumen-sandbox` 는
   반드시 Ring 3 사용자공간 프로세스로 실행. 커널-에이전트 간 통신은
-  iso-light-k0 의 syscall 또는 PSK 기반 IPC 채널 사용.
+  K0 의 syscall 또는 PSK 기반 IPC 채널 사용.
 - **모든 외부 fetch 금지** — `cargo build` 의 네트워크 시도조차
   `net.offline = true` 로 차단. crates.io 미러 운용 금지.
 - **모델 가중치 외부 반입** — Safetensors / ONNX / GGUF 파일은
@@ -142,7 +143,7 @@ Lumen 은 iso-light-k0 의 Ring 3 사용자공간 컴포넌트로 동작합니�
 | `vendor/` 무결성 | 빌드 전 | `./scripts/vendor.sh --check` |
 | 4-게이트 | 매 변경 | 위 §4 참고 |
 | `Cargo.lock` 변동 | PR 검토 | `git diff Cargo.lock` |
-| 시스템 바이너리 버전 | 분기 | `rustc --version`, `protoc --version` |
+| 시스템 바이너리 버전 | 분기 | `rustc --version`, `cmake --version` (`llama-cpp` 사용 시) |
 
 ---
 
@@ -152,11 +153,6 @@ Lumen 은 iso-light-k0 의 Ring 3 사용자공간 컴포넌트로 동작합니�
 
 → `.cargo/config.toml` 의 `vendored-sources` 가 활성화되지 않았거나
    `vendor/` 가 누락. `./scripts/vendor.sh` 재실행.
-
-### `error: Could not find protoc`
-
-→ `lumen-inference/candle` feature 사용 시 발생. 폐쇄망에 `protoc` 바이너리
-   사전 배치 필요. `PROTOC=/path/to/protoc cargo build ...` 로 명시 가능.
 
 ### `error: vendor/ 디렉토리가 없습니다`
 
@@ -174,4 +170,4 @@ Lumen 은 iso-light-k0 의 Ring 3 사용자공간 컴포넌트로 동작합니�
 
 - [`kernel-comp.md`](kernel-comp.md) — 의존성 점검 보고서
 - [`CLAUDE.md`](CLAUDE.md) — 프로젝트 헌장 (4-게이트, 한국어 docstring 등)
-- [iso-light-k0 AIR-GAP.md](../iso-light-k0/AIR-GAP.md) — 커널 측 폐쇄망 프로토콜
+- [K0 AIR-GAP.md](../K0/AIR-GAP.md) — 커널 측 폐쇄망 프로토콜

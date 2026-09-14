@@ -108,8 +108,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/checkout-deps
-      - name: install protoc
-        run: brew install protobuf
       - uses: Swatinem/rust-cache@v2
       - name: cargo build
         run: cargo build --workspace --all-targets --locked

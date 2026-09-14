@@ -1,6 +1,6 @@
 //! Lumen 전체에서 사용되는 BLAKE3 기반 해시 프리미티브.
 //!
-//! 폐쇄형(Air-Gapped) iso-light-k0 환경 호환을 위해 구현체는
+//! 폐쇄형(Air-Gapped) K0 환경 호환을 위해 구현체는
 //! `elib-k0-nt/blake` 의 [`Blake3`] 를 사용합니다. 외부 `blake3` 크레이트
 //! 의존을 제거합니다.
 

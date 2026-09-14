@@ -1,6 +1,6 @@
 //! Lumen의 RNG 추상화 모듈입니다.
 //!
-//! 폐쇄형(Air-Gapped) iso-light-k0 마이크로커널 환경 호환을 위해 외부
+//! 폐쇄형(Air-Gapped) K0 마이크로커널 환경 호환을 위해 외부
 //! `rand` / `rand_core` 크레이트 대신 `elib-k0-nt/rng` 의 OS 엔트로피
 //! 수집과 NIST SP 800-90A Hash_DRBG 를 그대로 노출하는 얇은 래퍼입니다.
 //!
