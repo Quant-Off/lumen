@@ -88,9 +88,9 @@ fn make_runtime() -> AgentRuntime {
 /// `OsRng` here only feeds the *capability nonce* - the policy engine's replay
 /// table demands uniqueness; everything else in the proof binding is fixed.
 fn rand_nonce() -> [u8; 16] {
-    use rand::RngCore;
+    use lumen_core::rng::Rng;
     let mut n = [0u8; 16];
-    rand::rngs::OsRng.fill_bytes(&mut n);
+    lumen_core::rng::OsRng.fill_bytes(&mut n);
     n
 }
 

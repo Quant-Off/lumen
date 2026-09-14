@@ -17,11 +17,11 @@ use lumen_capability::{
     capability::{Capability, CapabilityBody},
     PolicyEngine, Resource,
 };
+use lumen_core::rng::OsRng;
 use lumen_core::{AgentId, Blake3Hash, CapabilityId, SigningKey, Timestamp, ToolId};
 use lumen_inference::DummyEngine;
 use lumen_orchestrator::{AgentSpec, Orchestrator};
 use lumen_zkml::mock::MockVk;
-use rand::rngs::OsRng;
 
 fn issue_tool_cap(
     sk: &SigningKey,

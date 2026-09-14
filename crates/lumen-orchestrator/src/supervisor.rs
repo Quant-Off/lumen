@@ -426,10 +426,10 @@ mod tests {
         capability::{Capability, CapabilityBody},
         PolicyEngine, Resource,
     };
+    use lumen_core::rng::OsRng;
     use lumen_core::{Blake3Hash, CapabilityId, SigningKey, Timestamp, ToolId};
     use lumen_inference::DummyEngine;
     use lumen_zkml::mock::MockVk;
-    use rand::rngs::OsRng;
 
     fn build_runtime(nonce: [u8; 16]) -> (AgentId, Arc<AgentRuntime>) {
         let sk = SigningKey::generate(&mut OsRng);

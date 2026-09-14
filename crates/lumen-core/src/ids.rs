@@ -8,10 +8,10 @@
 use std::fmt;
 use std::str::FromStr;
 
-use rand_core::RngCore;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{Error, Result};
+use crate::rng::Rng;
 
 macro_rules! binary_id {
     ($name:ident, $doc:literal) => {
@@ -21,7 +21,7 @@ macro_rules! binary_id {
 
         impl $name {
             #[doc = "암호학적으로 안전한 RNG 로 임의의 ID 를 생성합니다."]
-            pub fn random<R: RngCore>(rng: &mut R) -> Self {
+            pub fn random<R: Rng>(rng: &mut R) -> Self {
                 let mut bytes = [0u8; 16];
                 rng.fill_bytes(&mut bytes);
                 Self(bytes)
@@ -169,7 +169,7 @@ impl<'de> Deserialize<'de> for ToolId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::rngs::OsRng;
+    use crate::rng::OsRng;
 
     #[test]
     fn agent_id_hex_roundtrip() {

@@ -23,6 +23,5 @@ parking_lot.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-rand = { workspace = true }
 serde_json = { workspace = true }
 toml.workspace = true

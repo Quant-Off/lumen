@@ -68,8 +68,8 @@ fn verify_tampered_file_fails() {
 
 #[test]
 fn verify_with_signature() {
+    use lumen_core::rng::OsRng;
     use lumen_core::SigningKey;
-    use rand::rngs::OsRng;
 
     let dir = tempfile::tempdir().unwrap();
     let path = write_tiny_safetensors(&dir);
@@ -94,4 +94,35 @@ fn verify_with_signature() {
     let other = SigningKey::generate(&mut OsRng);
     let err = verify_model(&path, &manifest, &[other.verifying_key()]).unwrap_err();
     assert!(err.to_string().contains("signature"));
+}
+
+/// 회귀: trusted_signers 가 비어있지 않은데 매니페스트가 미서명이면 거부.
+/// 이전 구현은 (signature, signer) 가 None 이면 silently skip 했음.
+#[test]
+fn unsigned_manifest_rejected_when_signers_required() {
+    use lumen_core::rng::OsRng;
+    use lumen_core::SigningKey;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = write_tiny_safetensors(&dir);
+    let hash = Blake3Hash::of_file(&path).unwrap();
+    let trusted = SigningKey::generate(&mut OsRng);
+
+    // signature/signer 가 None 이지만 trusted_signers 는 비어있지 않음.
+    let manifest = ModelManifest {
+        name: "tiny".into(),
+        version: "0.0.1".into(),
+        path: path.clone(),
+        format: Format::Safetensors,
+        hash,
+        license: None,
+        signature: None,
+        signer: None,
+    };
+    let err = verify_model(&path, &manifest, &[trusted.verifying_key()]).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("unsigned"),
+        "expected unsigned-rejection, got: {msg}"
+    );
 }

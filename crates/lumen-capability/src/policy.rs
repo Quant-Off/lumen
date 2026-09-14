@@ -137,8 +137,8 @@ fn _ensure_pattern_types_compile(_: &PathPattern, _: &HostPattern) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lumen_core::rng::OsRng;
     use lumen_core::{AgentId, CapabilityId, SigningKey};
-    use rand::rngs::OsRng;
 
     use crate::capability::{Capability, CapabilityBody};
 

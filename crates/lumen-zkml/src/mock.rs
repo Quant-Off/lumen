@@ -10,6 +10,7 @@
 //! 제공하지 않으며**, 약한 soundness 만 - 유일한 보장은 `(public, witness)`
 //! 양쪽을 모두 가진 누군가가 증명을 생성했다는 사실 - 만 제공합니다.
 
+use elib_blake::Blake3;
 use lumen_core::{Blake3Hash, Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -48,7 +49,7 @@ impl MockCommitmentProver {
             postcard::to_allocvec(public).map_err(|e| Error::Decode(format!("public: {e}")))?;
         let witness_bytes =
             postcard::to_allocvec(witness).map_err(|e| Error::Decode(format!("witness: {e}")))?;
-        let mut hasher = blake3::Hasher::new();
+        let mut hasher = Blake3::new();
         hasher.update(b"lumen.mock.commit.v1\x00");
         hasher.update(&u64::to_le_bytes(circuit_id.len() as u64));
         hasher.update(circuit_id.as_bytes());
@@ -56,7 +57,12 @@ impl MockCommitmentProver {
         hasher.update(&public_bytes);
         hasher.update(&u64::to_le_bytes(witness_bytes.len() as u64));
         hasher.update(&witness_bytes);
-        Ok(Blake3Hash(*hasher.finalize().as_bytes()))
+        let buf = hasher
+            .finalize()
+            .map_err(|e| Error::Zkml(format!("blake3 finalize: {e:?}")))?;
+        let mut out = [0u8; 32];
+        out.copy_from_slice(buf.as_slice());
+        Ok(Blake3Hash(out))
     }
 }
 

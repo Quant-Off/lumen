@@ -13,6 +13,7 @@ categories.workspace = true
 # `extern "C"` 호스트 임포트 선언과 메모리 포인터 변환에는 unsafe 가 불가피합니다.
 # 워크스페이스 lint 를 로컬에서 완화하고 모든 unsafe 블록에 SAFETY 주석을 강제합니다.
 [lints.rust]
+warnings = { level = "deny", priority = -2 }
 unsafe_code = "allow"
 missing_docs = "warn"
 unreachable_pub = "warn"

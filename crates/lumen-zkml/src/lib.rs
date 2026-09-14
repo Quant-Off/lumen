@@ -6,7 +6,7 @@
 //! 실행 가능합니다.
 //!
 //! [`ProvingSystem`] trait 가 백엔드 선택을 에이전트 런타임으로부터 숨깁니다.
-//! 세 가지 백엔드가 scaffold 되어 있습니다:
+//! 두 가지 백엔드가 scaffold 되어 있습니다:
 //!
 //! - **`mock`** - 항상 사용 가능. `(circuit_id, public_inputs, witness)` 를
 //!   바인드하는 BLAKE3 commitment 를 생성합니다. 검증은 binding 을 다시
@@ -14,7 +14,15 @@
 //!   아닙니다.** Verdict variant 는 의도적으로 [`Verification::ZkVerified`]
 //!   와 분리되어 있어 호출 사이트가 두 가지를 절대 혼동할 수 없습니다.
 //! - **`ezkl`** - feature-gated stub.
-//! - **`halo2`** - feature 뒤 실제 PLONK 회로 (binary argmax). v0.3.
+//!
+//! ## 폐쇄형(Air-Gapped) 환경 메모
+//!
+//! v0.3 까지 존재하던 `halo2` feature 와 그 PLONK 라우팅 회로는 v0.4 에서
+//! 제거되었습니다. `halo2_proofs` / `pasta_curves` 등 타원곡선 의존성이
+//! 매우 무거우면서도 `MockProver` 검증 단계에서는 witness 가 평문으로
+//! 노출되어 ZK 보장 자체가 없었기 때문입니다. 향후 succinct ZK 가 필요해
+//! 지면 SP1 / RISC Zero 등 별도 프레임워크 채택 여부를 마일스톤 재검토
+//! 시점에 결정합니다.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -24,8 +32,6 @@ pub mod verification;
 
 #[cfg(feature = "ezkl")]
 pub mod ezkl;
-#[cfg(feature = "halo2")]
-pub mod halo2;
 
 use lumen_core::Result;
 use serde::{de::DeserializeOwned, Serialize};

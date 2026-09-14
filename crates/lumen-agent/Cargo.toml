@@ -29,6 +29,5 @@ tracing.workspace = true
 parking_lot.workspace = true
 
 [dev-dependencies]
-rand = { workspace = true }
 postcard = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
