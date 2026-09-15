@@ -22,7 +22,7 @@ lumen-core.workspace = true
 lumen-capability.workspace = true
 lumen-defense.workspace = true
 lumen-provenance.workspace = true
-lumen-inference.workspace = true
+lumen-inference = { workspace = true, features = ["llama-server"] }
 lumen-zkml.workspace = true
 lumen-agent.workspace = true
 lumen-orchestrator.workspace = true
