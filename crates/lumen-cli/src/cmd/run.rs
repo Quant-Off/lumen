@@ -13,7 +13,7 @@ use lumen_agent::tool::{AddTool, EchoTool, Tool};
 use lumen_agent::AgentRuntime;
 use lumen_capability::PolicyEngine;
 use lumen_core::{Blake3Hash, ToolId};
-use lumen_inference::DummyEngine;
+use lumen_inference::{BackendRegistry, ToolCallGrammar};
 use lumen_orchestrator::{AgentSpec, Orchestrator};
 use lumen_zkml::mock::MockVk;
 
@@ -59,14 +59,38 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         }
     }
 
-    // 3. 런타임 빌드.
-    let policy_engine = Arc::new(PolicyEngine::new(policy.trusted_issuers.clone()));
-    let policy_hash = actual; // 라우팅 결정에 바인드
+    // 3. 추론 백엔드 생성. 정책 파일의 `[inference]` 가 백엔드 이름과
+    //    파라미터 (엔진 바이너리 해시 포함) 를 핀합니다. 도구 호출 문법은
+    //    등록 도구 집합으로부터 자동 생성해 문법을 지원하는 백엔드에 전달합니다.
     let echo_id = ToolId::new("echo")?;
     let add_id = ToolId::new("add")?;
+    let registry = BackendRegistry::with_builtins();
+    let mut params = policy.inference_params(policy_dir);
+    if policy.inference.backend != "dummy" {
+        if let Some(gbnf) = ToolCallGrammar::new([echo_id.clone(), add_id.clone()]).gbnf() {
+            params.entry("grammar".into()).or_insert(gbnf);
+        }
+    }
+    let engines = registry
+        .build(&policy.inference.backend, &params)
+        .await
+        .map_err(|e| anyhow::anyhow!("inference backend `{}`: {e}", policy.inference.backend))?;
+    let info = engines.info();
+    println!(
+        "inference backend: {} (model: {}, streaming: {}, grammar: {}, deterministic: {})",
+        info.backend,
+        info.model.as_deref().unwrap_or("-"),
+        info.capabilities.streaming,
+        info.capabilities.grammar,
+        info.capabilities.seed_deterministic
+    );
+
+    // 4. 런타임 빌드.
+    let policy_engine = Arc::new(PolicyEngine::new(policy.trusted_issuers.clone()));
+    let policy_hash = actual; // 라우팅 결정에 바인드
 
     let mut builder = AgentRuntime::builder(policy.agent.id, policy_engine.clone())
-        .inference(Arc::new(DummyEngine::new()))
+        .engines(engines)
         .tool(Tool {
             id: echo_id.clone(),
             schema: serde_json::json!({}),
@@ -91,7 +115,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     let runtime = Arc::new(builder.build()?);
 
-    // 4. 오케스트레이터 spawn 후 step 한 번 실행.
+    // 5. 오케스트레이터 spawn 후 step 한 번 실행.
     let orchestrator = Orchestrator::new();
     let handle = orchestrator.spawn(AgentSpec {
         agent_id: policy.agent.id,

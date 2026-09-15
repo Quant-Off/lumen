@@ -35,6 +35,24 @@ path = "models/tiny.safetensors"
 format = "Safetensors"
 hash = "0000000000000000000000000000000000000000000000000000000000000000"
 license = "Apache-2.0"
+
+# 추론 백엔드. 생략하면 결정론적 `dummy` 엔진 (echo / add 패턴만 인식).
+# llama.cpp 를 쓰려면 아래 예시처럼 `llama-server` 를 선택합니다. 엔진
+# 바이너리와 모델의 BLAKE3 가 이 파일과 함께 핀됩니다 (INFERENCE.md 참고).
+[inference]
+backend = "dummy"
+
+# [inference]
+# backend = "llama-server"
+# [inference.params]
+# mode        = "spawn"                      # 또는 "attach"
+# endpoint    = "unix:/run/lumen/llama.sock" # 또는 "tcp:127.0.0.1:8080"
+# binary      = "/opt/llama.cpp/llama-server"
+# binary_hash = "<llama-server 바이너리의 BLAKE3 hex>"
+# model       = "tiny-demo"                  # [[models]] 의 name 또는 GGUF 경로
+# n_ctx       = "4096"
+# gpu_layers  = "99"
+# parallel    = "1"                          # 결정론 필요 시 1
 "##
     );
     Ok(())

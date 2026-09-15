@@ -9,6 +9,7 @@
 //! CLI 의 `run` 서브커맨드는 파일의 BLAKE3 가 명령행으로 제공된 핀과 일치
 //! 해야 한다고 요구합니다 - 디스크 내용에 대한 묵시적 신뢰는 없습니다.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use lumen_capability::capability::Capability;
@@ -33,6 +34,39 @@ pub struct PolicyFile {
     /// 추적성을 위해 정책 해시에 포함되는 옵션 스냅샷 라벨.
     #[serde(default)]
     pub snapshot: Option<String>,
+    /// 추론 백엔드 선택. 생략하면 `dummy`.
+    #[serde(default)]
+    pub inference: InferenceSection,
+}
+
+/// inference 섹션.
+///
+/// `backend` 는 [`lumen_inference::BackendRegistry`] 에 등록된 이름이고,
+/// `params` 는 그 백엔드가 이해하는 키/값입니다. 정책 파일 전체가 BLAKE3
+/// 로 핀되므로 엔진 바이너리 해시 (`binary_hash`) 와 모델 해시도 함께
+/// 핀됩니다. `model` 이 `[[models]]` 의 이름과 같으면 그 매니페스트의 경로 /
+/// 해시 / 이름 / 버전으로 치환됩니다.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct InferenceSection {
+    /// 백엔드 이름 (`dummy`, `llama-server`, ...).
+    #[serde(default = "default_backend")]
+    pub backend: String,
+    /// 백엔드별 파라미터.
+    #[serde(default)]
+    pub params: BTreeMap<String, String>,
+}
+
+fn default_backend() -> String {
+    "dummy".into()
+}
+
+impl Default for InferenceSection {
+    fn default() -> Self {
+        Self {
+            backend: default_backend(),
+            params: BTreeMap::new(),
+        }
+    }
 }
 
 /// agent 섹션의 키.
@@ -65,5 +99,33 @@ impl PolicyFile {
         } else {
             policy_dir.join(&manifest.path)
         }
+    }
+
+    /// 백엔드 파라미터를 반환하되, `model` 이 `[[models]]` 의 이름을 가리키면
+    /// 매니페스트의 경로 / 해시 / 이름 / 버전으로 치환합니다. 상대 경로 파라미터
+    /// (`model`, `binary`, `api_key_file`) 는 `policy_dir` 기준으로 절대화합니다.
+    pub fn inference_params(&self, policy_dir: &Path) -> BTreeMap<String, String> {
+        let mut params = self.inference.params.clone();
+        if let Some(model) = params.get("model").cloned() {
+            if let Some(m) = self.models.iter().find(|m| m.name == model) {
+                let path = Self::resolve_model_path(policy_dir, m);
+                params.insert("model".into(), path.to_string_lossy().into_owned());
+                params.insert("model_hash".into(), m.hash.to_hex());
+                params.insert("model_name".into(), m.name.clone());
+                params.insert("model_version".into(), m.version.clone());
+            }
+        }
+        for key in ["model", "binary", "api_key_file"] {
+            if let Some(v) = params.get(key) {
+                let p = Path::new(v);
+                if !p.is_absolute() {
+                    params.insert(
+                        key.into(),
+                        policy_dir.join(p).to_string_lossy().into_owned(),
+                    );
+                }
+            }
+        }
+        params
     }
 }
