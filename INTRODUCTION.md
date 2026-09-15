@@ -28,7 +28,7 @@ This principle permeates the entire codebase. Policy files are pinned with BLAKE
 
 ### Air-Gapped Friendly
 
-The design goal is to **operate in air-gapped networks with no internet connection**. Accordingly, the build is self-contained with no external calls, composed of a Cargo workspace and verified dependency pins. All verification such as hashing, signing, and ZKP generation is performed locally. Determinism is guaranteed — the same input reproduces the same bits, which is a prerequisite for ZKP reproducibility.
+The design goal is to **operate in air-gapped networks with no internet connection**. Accordingly, the build is self-contained with no external calls: every third-party crate source is vendored into `vendor/`, and `.cargo/config.toml` forces crates.io source replacement plus `net.offline`, so online and air-gapped builds compile byte-identical sources. All verification such as hashing, signing, and ZKP generation is performed locally. Determinism is guaranteed — the same input reproduces the same bits, which is a prerequisite for ZKP reproducibility.
 
 ### Contribution to AI and Security Open Source
 
@@ -63,7 +63,7 @@ flowchart LR
 
 Tool selection and output filtering can be expressed as small circuits such as *argmax*, *lookup table*, and *regex match*, and are therefore provable with ezkl or halo2-class systems. This keeps the LLM itself secret while making the $`(\text{prompt}, \text{policy}) \mapsto \text{tool\_id}`$ mapping externally verifiable — any attempt to bypass the policy is caught at the ZKP level.
 
-The **current implementation** has `MockCommitmentProver` (BLAKE3 commitment) and ezkl/halo2 feature stubs layered on top of the `ProvingSystem` trait, with actual circuit implementation proceeding in [v0.3](#roadmap). The distinction between proofs and commitments is key. `Verification::ZkVerified` and `Verification::CommitmentOnly` are explicitly separated as distinct variants, enforced at the type system level so the mock backend can *never* claim "ZK proven." The mock's `verify` function explicitly rejects witnessless calls, and only a separate `verify_with_witness` API can return `CommitmentOnly`.
+The **current implementation** has `MockCommitmentProver` (BLAKE3 commitment) and a feature-gated `ezkl` stub layered on top of the `ProvingSystem` trait. The halo2 binary-argmax circuit that shipped in v0.3 was removed in [v0.5](#roadmap): its `MockProver` verification exposed the witness in plaintext and gave no ZK guarantee while pulling in heavy elliptic-curve dependencies, so a succinct backend (SP1, RISC Zero, or similar) will be chosen at the next milestone review. Until then every proof Lumen emits is a commitment, not a ZK proof, and the type system says so. The distinction between proofs and commitments is key. `Verification::ZkVerified` and `Verification::CommitmentOnly` are explicitly separated as distinct variants, enforced at the type system level so the mock backend can *never* claim "ZK proven." The mock's `verify` function explicitly rejects witnessless calls, and only a separate `verify_with_witness` API can return `CommitmentOnly`.
 
 ### Privilege-Separated Host-WASM Sandbox
 
@@ -140,6 +140,8 @@ SignedFrame := { frame: DataFrame, signature: Signature }
 
 TEE attestation extends the same frame format in v0.3 by adding `marker = "lumen.attested-tee.v1"` and an `attestation_doc: Vec<u8>` field. Verifiers can explicitly reject the software marker, preventing accidents like *"attestation was required but silently downgraded to a software fallback."*
 
+Two further channel pieces exist. `EncryptedChannel` (behind the `crypto-channel` feature) wraps any `SecureChannel` with a mutually authenticated ephemeral X25519 key exchange, a BLAKE3 keyed KDF, per-direction AES-256-GCM keys, and deterministic nonces; non-contributory shared secrets are rejected. The host ↔ TEE `TeeChannel`, on the other hand, is still a placeholder that returns `NotImplemented` for every operation, and `lumen-attestation` currently parses Intel TDX Quote v4 and AMD SEV-SNP Report v2 documents for format consistency only (`Verdict::FormatOnly`) — certificate-chain verification is not implemented yet.
+
 > [!NOTE]
 > To communicate with the host, WASM must submit a Capability — signed with Ed25519 and therefore unforgeable. Using a security badge as an analogy: upon submission, the host checks **(1) whether it has been forged (signature check)**, **(2) whether it belongs to the requester**, **(3) whether it is still within its validity period**, and **(4) whether the correct door is being accessed**. Once these checks pass, the nonce is marked "used" and access is granted.
 >
@@ -185,7 +187,7 @@ pub enum BlockReason {
 
 The `corpus_version` pin (`"lumen-defense/lexicon/0001"`) is included in the audit log and ZK witness, allowing verifiers to reproduce results with the same corpus. If the corpus changes, the fingerprint changes; if the fingerprint embedded in the witness differs from the one at verification time, verification fails — blocking silent corpus drift.
 
-**Model Provenance** (`lumen-provenance`) performs a full-file BLAKE3 hash and optional Ed25519 signature verification. Safetensors headers undergo structural validation only — tensors are never instantiated. ONNX header validation is performed by a hand-written ~100-line protobuf decoder. **GGUF header verification** (for llama.cpp / candle-transformers quantized weights) has been added, checking the magic bytes and version field. `lumen-inference`'s `VerifiedModelLoader` enforces this verification on every load path — the type system makes it structurally impossible to access model bytes via a raw path. A CycloneDX 1.5 SBOM is automatically generated with BLAKE3 algorithm and license metadata.
+**Model Provenance** (`lumen-provenance`) performs a full-file BLAKE3 hash and optional Ed25519 signature verification. Safetensors headers undergo structural validation only — tensors are never instantiated. ONNX header validation is performed by a hand-written ~100-line protobuf decoder. **GGUF header verification** (for llama.cpp-style quantized weights) has been added, checking the magic bytes and version field. `lumen-inference`'s `VerifiedModelLoader` enforces this verification on every load path — the type system makes it structurally impossible to access model bytes via a raw path. A CycloneDX 1.5 SBOM is automatically generated with BLAKE3 algorithm and license metadata.
 
 There are three reasons the ONNX decoder is hand-written rather than using `prost-build`.
 
@@ -219,23 +221,28 @@ The overall system is structured as follows.
 flowchart TD
     CLI[lumen-cli] --> ORCH[lumen-orchestrator<br/>multi-agent]
     CLI --> AG[lumen-agent<br/>runtime · tools]
+    CLI --> ONC[lumen-onchain<br/>EVM · Mina verifier emit]
     ORCH <--> AG
     AG --> DEF[lumen-defense]
-    AG --> INF[lumen-inference]
-    AG --> ZK[lumen-zkml]
+    AG --> INF[lumen-inference<br/>Dummy · ChannelEngine · llama.cpp stub]
+    AG --> ZK[lumen-zkml<br/>Mock commitment · ezkl stub]
     AG --> CAP[lumen-capability]
     ORCH --> CH[lumen-channel]
+    INF --> CH
     CH --> AT[lumen-channel::attested<br/>Ed25519 handshake +<br/>signed framing]
+    CH --> ENC[lumen-channel::encrypted<br/>X25519 KEX · AES-256-GCM]
+    CH --> ATT[lumen-attestation<br/>TDX · SEV-SNP parser]
     AG --> SBX[lumen-sandbox<br/>wasmtime · capability-gated]
-    AG --> CORE[lumen-core<br/>BLAKE3 · Ed25519]
+    SDK[lumen-sdk · lumen-sdk-macros<br/>wasm32 agent SDK] -. wasm32 guest .-> SBX
+    AG --> CORE[lumen-core<br/>BLAKE3 · Ed25519 · CSPRNG]
     AG --> FIX[lumen-fixed<br/>Q16.16 · Q8.24]
-    AG --> PROV[lumen-provenance<br/>Safetensors · ONNX · SBOM]
+    INF --> PROV[lumen-provenance<br/>Safetensors · ONNX · GGUF · SBOM]
 ```
 
-A single step of `AgentRuntime::step(prompt) -> StepResult` proceeds in a defined sequence. For streaming use cases, `AgentRuntime::stream_step(prompt)` emits `StreamEvent::Token` events one token at a time and delivers `StreamEvent::Complete(StepResult)` when the stream ends.
+A single step of `AgentRuntime::step(prompt) -> StepResult` proceeds in a defined sequence. For streaming use cases, `AgentRuntime::stream_step(prompt)` emits `StreamEvent::Token` events one token at a time and delivers `StreamEvent::Complete(Box<StepResult>)` when the stream ends.
 
 - **Defense** stage: `DefenseEngine::analyze(prompt)` is called; if `Verdict::Block`, the step short-circuits immediately and `defense_verdict` is recorded in `StepResult`.
-- **Inference** stage: `InferenceEngine::complete(prompt, params)` returns `Completion { text, tool_call }`. Backends that implement `StreamingEngine` (such as `CandleLlmEngine`) produce a token stream via `stream_complete`.
+- **Inference** stage: `InferenceEngine::complete(prompt, params)` returns `Completion { text, tool_call }`. Backends that implement `StreamingEngine` produce a token stream via `stream_complete`; today that is only the `LlamaCppEngine` interface stub behind the `llama-cpp` feature, while the default `DummyEngine` and the `ChannelEngine` TEE forwarder are non-streaming.
 - **Policy** stage: if `tool_call.is_some()`, the Capability for that tool is looked up and `PolicyEngine::check` performs the four-step verification. If it passes, the **Tool execution** stage calls `ToolHandler::call(args_json)` on the host side and captures the JSON output.
 - **Routing decision construction** stage: the following public inputs and witnesses are determined.
 
@@ -256,11 +263,11 @@ The attacks Lumen defends against, by category:
 - **Channel security**: Message interception between host and sandbox is defended by the attested channel's Ed25519 mutual auth and signed frames; message replay is rejected by $(\text{epoch}, \text{seq})$ sequence numbers.
 - **WASM resource control**: Infinite loops or memory overflow are hard-limited by wasmtime's fuel + epoch interruption + memory_pages cap.
 - **Multi-agent isolation**: Information leakage between agents is defended by tokio-isolated tasks and channel-only communication — there is no shared memory.
-- **ZK proof forgery**: With the mock backend, recomputation is impossible without the witness due to BLAKE3 binding; from v0.3 onward, the actual backend is guaranteed by the soundness of ezkl/halo2.
+- **ZK proof forgery**: With the mock backend, a commitment cannot be recomputed without the witness due to BLAKE3 binding, but this is not a zero-knowledge proof and the witness must stay confidential. Soundness against forgery will come only from the succinct backend chosen after v0.5; until then `Verification::ZkVerified` is unreachable.
 - **ZK reproducibility attacks**: Attempts to create proof differences by exploiting non-determinism are blocked by the combination of integer fixed-point + BLAKE3 + BTreeMap + wasmtime SIMD off.
 - **Adversarial ONNX headers**: Varint overflow, group wire-types, and similar issues are rejected by the strict decoder's comprehensive boundary checks.
 
-It is equally important to be explicit about what is *not* defended. Leakage of a trusted issuer's private key is in the PKI responsibility domain — Lumen **assumes the issuer key is managed securely**. This is clearly critical. A compromised host OS is TEE's responsibility and is **only partially mitigated** by v0.3 attestation. LLM hallucinations are in the fine-tuning or RLHF domain — Lumen only verifies *decisions and tool calls*. Finally, physical access attacks such as cold boot or side-channel attacks are **the domain of dedicated hardware**.
+It is equally important to be explicit about what is *not* defended. Leakage of a trusted issuer's private key is in the PKI responsibility domain — Lumen **assumes the issuer key is managed securely**. This is clearly critical. A compromised host OS is TEE's responsibility and is **only partially mitigated** by attestation, which today is format validation of TDX / SEV-SNP documents without cryptographic chain verification. LLM hallucinations are in the fine-tuning or RLHF domain — Lumen only verifies *decisions and tool calls*. Finally, physical access attacks such as cold boot or side-channel attacks are **the domain of dedicated hardware**.
 
 > [!IMPORTANT]
 > Some cryptographic features may need to be modified in consideration of HSM connectivity.
@@ -278,11 +285,11 @@ The **v0.1** (completed) milestone includes: a minimal working implementation ac
 
 The **v0.2** (completed) milestone added: multi-agent and inter-agent messaging (star-routing), ONNX header validation (hand-written protobuf parser), determinism 100-serial + 32-parallel byte-equal stress tests, and a software-attested SecureChannel (Ed25519 handshake + signed frames). 89 tests pass and `clippy -D warnings` is clean.
 
-The **v0.3** (completed, public release point) milestone includes: an actual Rust → wasm32 agent build pipeline and SDK, ezkl or halo2 actual circuits (starting with argmax and softmax routing), TEE attestation document parsing (Intel TDX quote, AMD SEV-SNP report), candle integration (small ONNX model inference), and GitHub Actions CI (build + test + clippy + cargo-deny + cargo-audit).
+The **v0.3** (completed, public release point) milestone includes: an actual Rust → wasm32 agent build pipeline and SDK, ezkl or halo2 actual circuits (starting with argmax and softmax routing), TEE attestation document parsing (Intel TDX quote, AMD SEV-SNP report), candle integration (small ONNX model inference), and GitHub Actions CI (build + test + clippy + cargo-deny + cargo-audit). The halo2 circuit and the candle path were later retired in v0.5 (see below).
 
-The **v0.4** (completed) milestone added: on-chain (Mina or EVM) verifier emit + deployment automation (`lumen-onchain` crate and `lumen verifier emit/deploy` subcommands), capability-gated inter-agent messaging (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 channel encryption (mutually-authenticated ephemeral KEX, blake3 KDF, per-direction keys, deterministic nonce), Rust → WASM agent SDK (`#[lumen_agent]` proc macro — `lumen-sdk-macros` crate), model pin auto-rotation (`PinSet` + grace period for zero-downtime deployment), and the **LLM inference pipeline** (`CandleLlmEngine`: GGUF quantized weights + HuggingFace tokenizer + token-by-token streaming, `StreamingEngine` trait, `VerifiedModelLoader` verification enforcement, `QuantizationConfig` with GGUF/FixedPoint/Int8 modes, `BackendConfig` factory, GGUF header provenance verification).
+The **v0.4** (completed) milestone added: on-chain (Mina or EVM) verifier emit + deployment automation (`lumen-onchain` crate and `lumen verifier emit/deploy` subcommands), capability-gated inter-agent messaging (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 channel encryption (mutually-authenticated ephemeral KEX, blake3 KDF, per-direction keys, deterministic nonce), Rust → WASM agent SDK (`#[lumen_agent]` proc macro — `lumen-sdk-macros` crate), model pin auto-rotation (`PinSet` + grace period for zero-downtime deployment), and the **LLM inference pipeline** (`CandleLlmEngine`: GGUF quantized weights + HuggingFace tokenizer + token-by-token streaming, `StreamingEngine` trait, `VerifiedModelLoader` verification enforcement, `QuantizationConfig` with GGUF/FixedPoint/Int8 modes, `BackendConfig` factory, GGUF header provenance verification); the candle-backed engine was retired in v0.5.
 
-The **v0.5** (completed) milestone focused on making the default cryptographic module verifiable ([issue #2](https://github.com/Quant-Off/lumen/issues/2)). Every in-house `elib-k0-nt` path dependency was replaced with publicly audited crates (`blake3`, `ed25519-dalek` with strict verification, `x25519-dalek` with contributory checks, RustCrypto `aes-gcm`, `getrandom` + `chacha20` DRBG, `subtle`, `zeroize`), and known-answer regression tests (`crypto_kat.rs`) pin the official BLAKE3 vectors, RFC 8032, RFC 7748 and NIST GCM vectors. All external crate sources are now vendored into `vendor/` with `.cargo/config.toml` enforcing source replacement + `net.offline`, so online and air-gapped builds use byte-identical sources.
+The **v0.5** (completed) milestone focused on making the default cryptographic module verifiable ([issue #2](https://github.com/Quant-Off/lumen/issues/2)). Every in-house `elib-k0-nt` path dependency was replaced with publicly audited crates (`blake3`, `ed25519-dalek` with strict verification, `x25519-dalek` with contributory checks, RustCrypto `aes-gcm`, `getrandom` + `chacha20` DRBG, `subtle`, `zeroize`), and known-answer regression tests (`crypto_kat.rs`) pin the official BLAKE3 vectors, RFC 8032, RFC 7748 and NIST GCM vectors. In the same cycle the dependency surface was cut down for air-gapped builds: the halo2 backend (`MockProver`-only, no ZK guarantee) and the candle / HuggingFace `tokenizers` inference path were removed, a `llama-cpp` backend interface stub and a self-contained byte-level BPE tokenizer (GGUF metadata or GPT-2 `vocab.json` + `merges.txt`, `BTreeMap`-only for determinism) took their place, and wasmtime moved to 48 to clear RUSTSEC advisories. All external crate sources are now vendored into `vendor/` with `.cargo/config.toml` enforcing source replacement + `net.offline`, so online and air-gapped builds use byte-identical sources.
 
 **v1.0** (target) aims for production deployment in government or regulated environments, [FIPS 140-3 compliance audit](https://csrc.nist.gov/pubs/fips/140-3/final), formal verification of select modules using [Kani](https://www.in-com.com/ko/blog/the-rust-developers-toolbox-best-static-code-analysis-tools/#Kani) or [Prusti](https://github.com/viperproject/prusti-dev), and passing one external security audit. Even without formal passage, the project will still be published — with a clear indication that it has not been verified.
 
@@ -294,6 +301,4 @@ Once again, Lumen is *assembled* on top of these projects — it is the glue cod
 
 ## Additional Notes
 
-How does the content of this document feel to you? If you find any issues or have questions about the direction we have taken, please feel free to express your views openly. We will consider additions or modifications to make the documentation more beginner-friendly.
-
-Please share your feedback via [issues](https://github.com/Quant-Off/lumen/issues) or email us directly at <qtfelix@qu4nt.space>. For contributions, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) document.
+Please share your feedback via [issues](https://github.com/Quant-Off/lumen/issues) or email us directly at <qtfelix@qu4nt.space>.

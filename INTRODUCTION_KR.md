@@ -28,7 +28,7 @@ Lumen의 모든 설계 결정을 관통하는 원칙은 다음과 같습니다.
 
 ### 폐쇄 (Air-Gapped) 친화
 
-설계 목표는 **인터넷 연결이 없는 폐쇄망에서 동작**하는 것입니다. 따라서 빌드는 외부 호출이 없는 self-contained 형태이며, Cargo workspace와 검증된 의존성 핀으로 구성됩니다. 해시, 서명, ZKP 생성과 같은 모든 검증은 로컬에서 수행됩니다. 그리고 결정성이 보장되어, 같은 입력은 같은 비트로 재생산 가능한데 이는 ZKP 재현성의 전제 조건입니다.
+설계 목표는 **인터넷 연결이 없는 폐쇄망에서 동작**하는 것입니다. 따라서 빌드는 외부 호출이 없는 self-contained 형태입니다. 모든 외부 크레이트 소스는 `vendor/` 에 고정되고 `.cargo/config.toml` 이 crates.io source replacement 와 `net.offline` 을 강제하므로, 온라인과 폐쇄망 어디서든 비트 동일한 소스로 컴파일됩니다. 해시, 서명, ZKP 생성과 같은 모든 검증은 로컬에서 수행됩니다. 그리고 결정성이 보장되어, 같은 입력은 같은 비트로 재생산 가능한데 이는 ZKP 재현성의 전제 조건입니다.
 
 ### AI 및 보안 오픈소스 기여
 
@@ -63,11 +63,11 @@ flowchart LR
 
 도구 선택과 출력 필터링은 *argmax*, *lookup table*, *regex match*와 같은 작은 회로로 표현 가능하므로 ezkl 또는 halo2 클래스 시스템으로 증명 가능합니다. 이렇게 하면 LLM 자체는 비밀로 유지되면서도 $`(\text{prompt}, \text{policy}) \mapsto \text{tool\_id}`$ 매핑은 외부에서 검증 가능해지고, 정책 우회 시도가 ZKP 차원에서 들통나게 됩니다.
 
-**현재 구현**은 `ProvingSystem` trait 위에 `MockCommitmentProver`(BLAKE3 commitment)와 ezkl/halo2 feature 스텁이 올라가 있으며 실제 회로화는 [v0.3](#로드맵)에서 진행됐습니다. 증명과 commitment의 구분이 핵심입니다. `Verification::ZkVerified`와 `Verification::CommitmentOnly`는 명시적으로 별개 variant로 분리되어 mock 백엔드가 *절대* "ZK 증명됨"을 주장할 수 없도록 타입 시스템 차원에서 강제됩니다. Mock의 `verify` 함수는 witnessless 호출을 명시적으로 거부하고, 별도의 `verify_with_witness` API만 `CommitmentOnly`를 반환할 수 있습니다.
+**현재 구현**은 `ProvingSystem` trait 위에 `MockCommitmentProver`(BLAKE3 commitment)와 feature-gated `ezkl` 스텁이 올라가 있습니다. v0.3 에서 도입됐던 halo2 binary-argmax 회로는 [v0.5](#로드맵)에서 제거됐습니다. `MockProver` 검증 단계에서 witness 가 평문으로 노출되어 ZK 보장이 없었고, 그럼에도 무거운 타원곡선 의존성을 끌어왔기 때문입니다. succinct 백엔드(SP1, RISC Zero 등)는 다음 마일스톤 재검토 시점에 선정합니다. 그 전까지 Lumen 이 발행하는 모든 증명은 ZK 증명이 아닌 commitment 이며, 타입 시스템이 이를 그대로 드러냅니다. 증명과 commitment의 구분이 핵심입니다. `Verification::ZkVerified`와 `Verification::CommitmentOnly`는 명시적으로 별개 variant로 분리되어 mock 백엔드가 *절대* "ZK 증명됨"을 주장할 수 없도록 타입 시스템 차원에서 강제됩니다. Mock의 `verify` 함수는 witnessless 호출을 명시적으로 거부하고, 별도의 `verify_with_witness` API만 `CommitmentOnly`를 반환할 수 있습니다.
 
 ### 권한 분리형 Host-WASM 샌드박스
 
-호스트와 샌드박스(snadbox)는 명확히 분리된 책임을 가집니다. 호스트(TEE) 측은 LLM 추론(GPU 가속)과 모델 가중치 보호, 정책 엔진, Capability 발급과 검증을 담당합니다. WASM 샌드박스 측은 에이전트 로직, 도구 호출 라우팅, 출력 필터링을 담당합니다. 양측은 *Attested* 보안 채널로만 통신합니다.
+호스트와 샌드박스는 명확히 분리된 책임을 가집니다. 호스트(TEE) 측은 LLM 추론(GPU 가속)과 모델 가중치 보호, 정책 엔진, Capability 발급과 검증을 담당합니다. WASM 샌드박스 측은 에이전트 로직, 도구 호출 라우팅, 출력 필터링을 담당합니다. 양측은 *Attested* 보안 채널로만 통신합니다.
 
 ```mermaid
 flowchart LR
@@ -140,6 +140,8 @@ SignedFrame := { frame: DataFrame, signature: Signature }
 
 TEE attestation은 동일한 프레임 형식에 `marker = "lumen.attested-tee.v1"`와 `attestation_doc: Vec<u8>` 필드를 추가하는 방식으로 v0.3에서 확장되었습니다. 검증자는 software marker 를 명시적으로 거부할 수 있어 *"attestation이 필요한데 software fallback으로 silent downgrade"* 같은 사고가 원천 차단됩니다.
 
+채널 구성 요소가 두 가지 더 있습니다. `EncryptedChannel`(`crypto-channel` feature)은 임의의 `SecureChannel` 을 상호 인증된 ephemeral X25519 키 교환, BLAKE3 keyed KDF, 방향별 AES-256-GCM 키, 결정론적 nonce 로 감싸며 non-contributory 공유 비밀은 거부합니다. 반면 호스트 <-> TEE `TeeChannel` 은 아직 모든 연산에서 `NotImplemented` 를 반환하는 자리표시자이고, `lumen-attestation` 은 현재 Intel TDX Quote v4 와 AMD SEV-SNP Report v2 문서의 형식 일관성만 검사합니다(`Verdict::FormatOnly`). 인증서 체인 검증은 아직 구현되지 않았습니다.
+
 > [!NOTE]
 > WASM은 외부에 접근하기 위해 Capability를 제춣해야 합니다. 이는 Ed25519로 서명되어 위조 불가능합니다. 이를 출입증으로 예를 들어, 제출 시 호스트가 **(1) 위조되지 않았는지(서명 확인)**, **(2) 본인이 맞는지**, **(3) 유효기간이 남았는지**, **(4) 허락된 문이 맞는지**를 확인합니다. 이러한 검문을 통과하면 nonce에 '사용 완료'를 표시하고 접근을 허용합니다.
 >
@@ -185,7 +187,7 @@ pub enum BlockReason {
 
 `corpus_version` 핀(`"lumen-defense/lexicon/0001"`)이 audit log와 ZK witness에 포함되어 검증자가 동일한 corpus로 재현 가능합니다. corpus가 바뀌면 fingerprint가 바뀌고, witness에 박힌 fingerprint와 검증 시 fingerprint가 다르면 verification이 실패하여 silent corpus drift가 차단됩니다.
 
-**모델 Provenance**(`lumen-provenance`)는 BLAKE3 전체 파일 해시와 선택적 Ed25519 서명 검증을 수행합니다. Safetensors 헤더는 구조 검증만 거치고 텐서를 인스턴스화하지는 않습니다. ONNX 헤더 검증은 직접 작성한 100여 라인 protobuf 디코더로 수행됩니다. **GGUF 헤더 검증**(llama.cpp / candle-transformers 양자화 가중치)이 추가되어 매직 바이트와 버전 필드를 검사합니다. `lumen-inference`의 `VerifiedModelLoader`는 로드 경로에서 이 검증을 강제하여, raw 경로로는 모델 바이트에 접근 자체가 불가능하도록 타입 시스템이 보장합니다. CycloneDX 1.5 SBOM이 BLAKE3 algorithm과 license 메타데이터를 포함하여 자동 생성됩니다.
+**모델 Provenance**(`lumen-provenance`)는 BLAKE3 전체 파일 해시와 선택적 Ed25519 서명 검증을 수행합니다. Safetensors 헤더는 구조 검증만 거치고 텐서를 인스턴스화하지는 않습니다. ONNX 헤더 검증은 직접 작성한 100여 라인 protobuf 디코더로 수행됩니다. **GGUF 헤더 검증**(llama.cpp 계열 양자화 가중치)이 추가되어 매직 바이트와 버전 필드를 검사합니다. `lumen-inference`의 `VerifiedModelLoader`는 로드 경로에서 이 검증을 강제하여, raw 경로로는 모델 바이트에 접근 자체가 불가능하도록 타입 시스템이 보장합니다. CycloneDX 1.5 SBOM이 BLAKE3 algorithm과 license 메타데이터를 포함하여 자동 생성됩니다.
 
 ONNX 디코더가 `prost-build`가 아닌 직접 작성인 데에는 세 가지 이유가 있습니다.
 
@@ -219,23 +221,28 @@ pub struct OnnxHeader {
 flowchart TD
     CLI[lumen-cli] --> ORCH[lumen-orchestrator<br/>multi-agent]
     CLI --> AG[lumen-agent<br/>runtime · tools]
+    CLI --> ONC[lumen-onchain<br/>EVM · Mina verifier emit]
     ORCH <--> AG
     AG --> DEF[lumen-defense]
-    AG --> INF[lumen-inference]
-    AG --> ZK[lumen-zkml]
+    AG --> INF[lumen-inference<br/>Dummy · ChannelEngine · llama.cpp stub]
+    AG --> ZK[lumen-zkml<br/>Mock commitment · ezkl stub]
     AG --> CAP[lumen-capability]
     ORCH --> CH[lumen-channel]
+    INF --> CH
     CH --> AT[lumen-channel::attested<br/>Ed25519 handshake +<br/>signed framing]
+    CH --> ENC[lumen-channel::encrypted<br/>X25519 KEX · AES-256-GCM]
+    CH --> ATT[lumen-attestation<br/>TDX · SEV-SNP parser]
     AG --> SBX[lumen-sandbox<br/>wasmtime · capability-gated]
-    AG --> CORE[lumen-core<br/>BLAKE3 · Ed25519]
+    SDK[lumen-sdk · lumen-sdk-macros<br/>wasm32 agent SDK] -. wasm32 guest .-> SBX
+    AG --> CORE[lumen-core<br/>BLAKE3 · Ed25519 · CSPRNG]
     AG --> FIX[lumen-fixed<br/>Q16.16 · Q8.24]
-    AG --> PROV[lumen-provenance<br/>Safetensors · ONNX · SBOM]
+    INF --> PROV[lumen-provenance<br/>Safetensors · ONNX · GGUF · SBOM]
 ```
 
-`AgentRuntime::step(prompt) -> StepResult`의 한 스텝은 정해진 순서로 진행됩니다. 스트리밍이 필요한 경우 `AgentRuntime::stream_step(prompt)` 를 사용하면 `StreamEvent::Token` 이벤트가 토큰 단위로 방출되고, 스트림 종료 시 `StreamEvent::Complete(StepResult)` 가 전달됩니다.
+`AgentRuntime::step(prompt) -> StepResult`의 한 스텝은 정해진 순서로 진행됩니다. 스트리밍이 필요한 경우 `AgentRuntime::stream_step(prompt)` 를 사용하면 `StreamEvent::Token` 이벤트가 토큰 단위로 방출되고, 스트림 종료 시 `StreamEvent::Complete(Box<StepResult>)` 가 전달됩니다.
 
 - **Defense** 단계: `DefenseEngine::analyze(prompt)`가 호출되고 `Verdict::Block`이면 즉시 단축되어 `StepResult`에 `defense_verdict`가 기록됩니다.
-- **Inference** 단계: `InferenceEngine::complete(prompt, params)`가 `Completion { text, tool_call }`을 반환합니다. `StreamingEngine` 을 구현한 백엔드 (`CandleLlmEngine` 등) 는 `stream_complete` 로 토큰 스트림을 생성합니다.
+- **Inference** 단계: `InferenceEngine::complete(prompt, params)`가 `Completion { text, tool_call }`을 반환합니다. `StreamingEngine` 을 구현한 백엔드는 `stream_complete` 로 토큰 스트림을 생성합니다. 현재는 `llama-cpp` feature 뒤의 `LlamaCppEngine` 인터페이스 스텁만 해당하며, 기본 `DummyEngine` 과 TEE 포워더 `ChannelEngine` 은 비스트리밍입니다.
 - **Policy** 단계: `tool_call.is_some()`인 경우 해당 tool의 Capability를 lookup하고 `PolicyEngine::check`로 4단 검증을 수행합니다. 검증을 통과하면 **Tool 실행** 단계에서 호스트 측 `ToolHandler::call(args_json)`이 호출되고 JSON 출력이 캡처됩니다.
 - **Routing decision 구축** 단계: 다음과 같은 public 입력과 witness가 결정됩니다.
 
@@ -256,11 +263,11 @@ Lumen이 방어하는 공격은 카테고리별로 다음과 같습니다.
 - **채널 보안**: 이 측면에서 호스트와 샌드박스 사이 메시지 가로채기는 attested channel의 Ed25519 mutual auth와 signed frames가 방어하고, 메시지 리플레이는 $(\text{epoch}, \text{seq})$ 시퀀스 번호로 거부됩니다.
 - **WASM 자원 제어**: 이 측면에서 무한 루프나 메모리 폭주는 wasmtime의 fuel + epoch interruption + memory_pages cap으로 hard limit 됩니다.
 - **멀티 에이전트 격리**: 이 측면에서 에이전트 간 정보 누출은 tokio 격리 태스크 + 채널-only 통신으로 방어되며 공유 메모리 자체가 없습니다.
-- **ZK 증명 위조**: 이 경우 mock 백엔드에서는 BLAKE3 binding 으로 witness 없이는 재계산이 불가능하고, v0.3 이후 실제 백엔드에서는 ezkl/halo2의 soundness가 보장합니다.
+- **ZK 증명 위조**: mock 백엔드에서는 BLAKE3 binding 으로 witness 없이는 commitment 재계산이 불가능하지만, 이는 영지식 증명이 아니므로 witness 는 비밀로 유지되어야 합니다. 위조에 대한 soundness 는 v0.5 이후 선정될 succinct 백엔드에서만 확보되며, 그 전까지 `Verification::ZkVerified` 는 도달 불가능합니다.
 - **ZK 재현성 공격**: 비결정성을 이용해 증명 차이를 만드는 시도는 정수 fixed-point + BLAKE3 + BTreeMap + wasmtime SIMD off 조합으로 차단됩니다.
 - **적대적 ONNX 헤더**: varint overflow, group wire-type 등은 직접 작성한 strict 디코더의 모든 경계 검사로 거부됩니다.
 
-명시적으로 *방어하지 않는* 것들도 분명히 해두어야 합니다. 신뢰된 issuer의 private key 누출은 PKI 책임 영역으로 Lumen은 issuer 키가 **안전하게 관리된다고 가정**합니다. 이건 확실히 중요합니다. 호스트 OS가 손상된 경우는 TEE의 책임이며 v0.3 attestation으로 **부분적으로만 완화**됩니다. LLM 자체의 환각은 fine-tuning 또는 RLHF 영역으로 Lumen은 *결정과 도구 호출*만 검증합니다. 마지막으로 cold boot 또는 side-channel같은 물리적 접근 공격은 **전용 하드웨어 영역**입니다.
+명시적으로 *방어하지 않는* 것들도 분명히 해두어야 합니다. 신뢰된 issuer의 private key 누출은 PKI 책임 영역으로 Lumen은 issuer 키가 **안전하게 관리된다고 가정**합니다. 이건 확실히 중요합니다. 호스트 OS가 손상된 경우는 TEE의 책임이며 attestation 으로 **부분적으로만 완화**됩니다. 현재 attestation 은 TDX / SEV-SNP 문서의 형식 검증에 그치며 암호학적 체인 검증은 없습니다. LLM 자체의 환각은 fine-tuning 또는 RLHF 영역으로 Lumen은 *결정과 도구 호출*만 검증합니다. 마지막으로 cold boot 또는 side-channel같은 물리적 접근 공격은 **전용 하드웨어 영역**입니다.
 
 > [!IMPORTANT]
 > HSM의 연결성을 고려하여 암호학적 기능을 몇 가지 수정해야 할 수 있습니다.
@@ -278,11 +285,11 @@ Lumen이 방어하는 공격은 카테고리별로 다음과 같습니다.
 
 **v0.2**(완료) 마일스톤은 다중 에이전트와 인터-에이전트 메시징 (스타-라우팅), ONNX 헤더 검증 (직접 작성 protobuf 파서), 결정성 100회 + 32-병렬 byte-equal 스트레스 테스트, software-attested SecureChannel(Ed25519 handshake + signed frames)을 추가했습니다. 89개 테스트가 통과하며 `clippy -D warnings` 가 clean 합니다.
 
-**v0.3**(완료, 공개 지점) 마일스톤은 실제 Rust -> wasm32 에이전트 빌드 파이프라인과 SDK, ezkl 또는 halo2 실제 회로 (argmax 와 softmax routing 부터), TEE attestation 문서 파싱 (Intel TDX quote, AMD SEV-SNP 보고서), candle 통합 (소형 ONNX 모델 추론), GitHub Actions CI(build + test + clippy + cargo-deny + cargo-audit)를 포함합니다.
+**v0.3**(완료, 공개 지점) 마일스톤은 실제 Rust -> wasm32 에이전트 빌드 파이프라인과 SDK, ezkl 또는 halo2 실제 회로 (argmax 와 softmax routing 부터), TEE attestation 문서 파싱 (Intel TDX quote, AMD SEV-SNP 보고서), candle 통합 (소형 ONNX 모델 추론), GitHub Actions CI(build + test + clippy + cargo-deny + cargo-audit)를 포함합니다. halo2 회로와 candle 경로는 이후 v0.5 에서 제거됐습니다(아래 참고).
 
-**v0.4**(완료) 마일스톤은 온체인(Mina 또는 EVM) 검증기 emit + 배포 자동화 (`lumen-onchain` 크레이트와 `lumen verifier emit/deploy` 서브커맨드), capability-gated 인터-에이전트 메시징 (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 채널 암호화 (mutual-authenticated ephemeral KEX, blake3 KDF, direction-별 키, deterministic nonce), Rust -> WASM 에이전트 SDK (`#[lumen_agent]` proc macro - `lumen-sdk-macros` 크레이트), 모델 핀 자동 회전(`PinSet` + grace period로 무중단 배포), 그리고 **LLM 추론 파이프라인 구현**(`CandleLlmEngine`: GGUF 양자화 가중치 + HuggingFace 토크나이저 + 토큰 단위 스트리밍, `StreamingEngine` trait, `VerifiedModelLoader` 검증 강제, `QuantizationConfig` GGUF/FixedPoint/Int8, `BackendConfig` 팩토리, GGUF 헤더 provenance 검증)을 추가합니다.
+**v0.4**(완료) 마일스톤은 온체인(Mina 또는 EVM) 검증기 emit + 배포 자동화 (`lumen-onchain` 크레이트와 `lumen verifier emit/deploy` 서브커맨드), capability-gated 인터-에이전트 메시징 (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 채널 암호화 (mutual-authenticated ephemeral KEX, blake3 KDF, direction-별 키, deterministic nonce), Rust -> WASM 에이전트 SDK (`#[lumen_agent]` proc macro - `lumen-sdk-macros` 크레이트), 모델 핀 자동 회전(`PinSet` + grace period로 무중단 배포), 그리고 **LLM 추론 파이프라인 구현**(`CandleLlmEngine`: GGUF 양자화 가중치 + HuggingFace 토크나이저 + 토큰 단위 스트리밍, `StreamingEngine` trait, `VerifiedModelLoader` 검증 강제, `QuantizationConfig` GGUF/FixedPoint/Int8, `BackendConfig` 팩토리, GGUF 헤더 provenance 검증)을 추가합니다. candle 기반 엔진은 v0.5 에서 제거됐습니다.
 
-**v0.5**(완료) 마일스톤은 기본 암호 모듈의 검증성 확보([이슈 #2](https://github.com/Quant-Off/lumen/issues/2))에 집중했습니다. in-house `elib-k0-nt` path 의존성을 공개 감사 이력이 있는 크레이트로 전부 교체하고(`blake3`, `ed25519-dalek` strict 검증, `x25519-dalek` contributory 검사, RustCrypto `aes-gcm`, `getrandom` + `chacha20` DRBG, `subtle`, `zeroize`), BLAKE3 공식 벡터 / RFC 8032 / RFC 7748 / NIST GCM 표준 벡터 KAT 회귀 테스트(`crypto_kat.rs`)를 추가했습니다. 또한 모든 외부 크레이트 소스를 `vendor/` 에 고정하고 `.cargo/config.toml` 로 source replacement + `net.offline` 을 강제해 온라인 / 폐쇄망 어디서든 동일 소스로 빌드되도록 했습니다.
+**v0.5**(완료) 마일스톤은 기본 암호 모듈의 검증성 확보([이슈 #2](https://github.com/Quant-Off/lumen/issues/2))에 집중했습니다. in-house `elib-k0-nt` path 의존성을 공개 감사 이력이 있는 크레이트로 전부 교체하고(`blake3`, `ed25519-dalek` strict 검증, `x25519-dalek` contributory 검사, RustCrypto `aes-gcm`, `getrandom` + `chacha20` DRBG, `subtle`, `zeroize`), BLAKE3 공식 벡터 / RFC 8032 / RFC 7748 / NIST GCM 표준 벡터 KAT 회귀 테스트(`crypto_kat.rs`)를 추가했습니다. 같은 주기에 폐쇄망 빌드를 위해 의존성 표면도 줄였습니다. halo2 백엔드(`MockProver` 전용, ZK 보장 없음)와 candle / HuggingFace `tokenizers` 추론 경로를 제거하고, 그 자리에 `llama-cpp` 백엔드 인터페이스 스텁과 자체 byte-level BPE 토크나이저(GGUF 메타데이터 또는 GPT-2 `vocab.json` + `merges.txt`, 결정성을 위해 `BTreeMap` 만 사용)를 두었으며, RUSTSEC 권고 해소를 위해 wasmtime 을 48 로 올렸습니다. 또한 모든 외부 크레이트 소스를 `vendor/` 에 고정하고 `.cargo/config.toml` 로 source replacement + `net.offline` 을 강제해 온라인 / 폐쇄망 어디서든 동일 소스로 빌드되도록 했습니다.
 
 **v1.0**(목표)는 정부 또는 규제 환경에서 production 배포, [FIPS 140-3 compliance audit](https://csrc.nist.gov/pubs/fips/140-3/final), [Kani](https://www.in-com.com/ko/blog/the-rust-developers-toolbox-best-static-code-analysis-tools/#Kani) 또는 [Prusti](https://github.com/viperproject/prusti-dev) 등을 활용한 일부 모듈의 형식 검증, 외부 보안 audit 1회 통과를 목표로 합니다. 정식 통과되지 않아도 여전히 공개하겠습니다. 물론 검증되지 않았다는 표시를 명확히 하겠습니다.
 
@@ -294,6 +301,4 @@ Lumen은 여러 검증된 오픈소스 프로젝트 위에 *조립*되었습니�
 
 ## 그 외
 
-이 문서의 내용이 어떻게 느껴지시나요? 문제가 있다고 생각하시거나, 저희가 생각한 방향에 의문점이 있다면 여러분의 주장을 적극적으로 표현해주셔도 됩니다. 초보자 친화적으로 문서를 추가 또는 수정하는 것을 고려하겠습니다.
-
-의견은 [이슈](https://github.com/Quant-Off/lumen/issues) 또는 이메일 다이렉트 <qtfelix@qu4nt.space>로 알려주시면 감사하겠습니다. 기여에 대해선 [CONTRIBUTING.md](CONTRIBUTING.md) 문서를 참고하세요.
+의견은 [이슈](https://github.com/Quant-Off/lumen/issues) 또는 이메일 다이렉트 <qtfelix@qu4nt.space>로 알려주시면 감사하겠습니다.
