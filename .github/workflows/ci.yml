@@ -13,14 +13,17 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   # Q. T. Felix NOTE: 과거에는 `RUSTFLAGS: -D warnings` 를 워크플로우 전역으로
-  #                   걸었으나, 이 환경변수는 워크스페이스 외부 path dep
-  #                   (`../elib-k0-nt/*`) 컴파일에도 그대로 적용되어 외부
-  #                   레포의 사소한 dead_code 경고가 lumen CI 를 깨뜨리는
-  #                   문제가 있었습니다. 동등한 게이트는 이제 워크스페이스
-  #                   `[workspace.lints.rust]` 의 `warnings = "deny"` 로
-  #                   lumen 멤버에만 한정해 적용됩니다. clippy 게이트는
+  #                   걸었으나, 이 환경변수는 외부 의존성 컴파일에도 그대로
+  #                   적용되어 외부 크레이트의 사소한 경고가 lumen CI 를
+  #                   깨뜨리는 문제가 있었습니다. 동등한 게이트는 이제
+  #                   워크스페이스 `[workspace.lints.rust]` 의 `warnings = "deny"`
+  #                   로 lumen 멤버에만 한정해 적용됩니다. clippy 게이트는
   #                   여전히 `cargo clippy ... -- -D warnings` 로 수행하며,
   #                   이 인자는 primary package (lumen 멤버) 에만 적용됩니다.
+  #
+  #                   모든 외부 크레이트 소스는 `vendor/` 에 커밋되어 있고
+  #                   `.cargo/config.toml` 이 source replacement + net.offline
+  #                   을 강제하므로, 모든 잡은 crates.io 접근 없이 빌드됩니다.
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -85,7 +88,6 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
       - name: cargo build
         run: cargo build --workspace --all-targets --locked
@@ -107,7 +109,6 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
       - name: cargo build
         run: cargo build --workspace --all-targets --locked
@@ -120,9 +121,9 @@ jobs:
         run: cargo build --release --target wasm32-unknown-unknown --locked
 
   # ---------------------------------------------------------------------------
-  # 폐쇄 환경(Air-Gapped) 호환성: `--offline` 빌드로 네트워크 fetch 없이도
-  # 워크스페이스가 빌드되는지 검증합니다. 의존성은 사전에 한 번만 받아오고,
-  # 그 이후의 `--offline` 단계가 통과해야 진짜 폐쇄망 배포 가능 상태입니다.
+  # 폐쇄 환경(Air-Gapped) 호환성: cargo 레지스트리 캐시를 비운 상태에서
+  # `--offline` 빌드가 통과하는지 검증합니다. 통과하면 `vendor/` 만으로
+  # 워크스페이스 전체가 빌드되는 진짜 폐쇄망 배포 가능 상태입니다.
   #
   # 참고:
   #   - `lumen-zkml` 의 `halo2` feature 는 v0.4 에서 제거되었습니다.
@@ -141,10 +142,10 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-deps
-      - uses: Swatinem/rust-cache@v2
-      - name: cargo fetch (online, one-shot)
-        run: cargo fetch --locked
+      - name: purge cargo registry cache (vendor/ 만으로 빌드되는지 확인)
+        run: rm -rf "$CARGO_HOME/registry" "$CARGO_HOME/git"
+      - name: vendor/ 정합성 검증
+        run: ./scripts/vendor.sh --check
       - name: cargo build --offline (default features)
         run: cargo build --workspace --all-targets --locked --offline
       - name: cargo build --offline (no default features)
@@ -166,7 +167,6 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -187,7 +187,6 @@ jobs:
       RUSTDOCFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-deps
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --workspace --no-deps --document-private-items
 
@@ -205,7 +204,6 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-deps
       - run: cargo deny check
 
   # ---------------------------------------------------------------------------
@@ -222,5 +220,4 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-deps
       - run: cargo audit

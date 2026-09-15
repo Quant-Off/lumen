@@ -1,12 +1,10 @@
-target/
+/target/
+/agents/*/target/
 .idea/
 .claude/
 .planning/
 .DS_Store
 *.swp
-/vendor/
-/.cargo/config.toml
-/.cargo/config.toml.backup-*
 
 kernel-comp.md
 KERNEL-COMPAT.md
