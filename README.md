@@ -4,12 +4,12 @@
 [![Lumen-Ver](https://img.shields.io/badge/Lumen_Milestone-v0.5.0-000000?style=for-the-badge)](https://github.com/Quant-Off/)
 [![Qu4nt-Space-Discord](https://img.shields.io/badge/Qu4nt_Space-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9utg4hp3m8)
 
-Lumen is a high-security, verifiable Rust AI agent framework for zero-trust and air-gapped environments. It combines permission control (WASM sandbox) with result verification (zkML) to enable safe, autonomous AI operation that meets the strict security standards required by government-grade deployments. For detailed design philosophy and technical background, refer to the [INTRODUCTION_EN.md](INTRODUCTION_KR.md) document.
+Lumen is a high-security, verifiable Rust AI agent framework for zero-trust and air-gapped environments. It combines permission control (WASM sandbox) with result verification (zkML) to enable safe, autonomous AI operation that meets the strict security standards required by government-grade deployments. For detailed design philosophy and technical background, refer to the [INTRODUCTION.md](INTRODUCTION.md) document.
 
 ## Quick Start
 
 > [!TIP]
-> To use Lumen’s LLM inference pipeline, please refer to the [PRACTICE_LLM_EN.md](PRACTICE_LLM_KR.md) document.
+> To use Lumen’s LLM inference pipeline, please refer to the [PRACTICE_LLM.md](PRACTICE_LLM.md) document.
 
 Developed on Rust stable 1.95 and operates stably on later versions. `rust-toolchain.toml` is applied automatically — no additional configuration is needed.
 
@@ -32,7 +32,7 @@ To see the full behavior at a glance:
 $ cargo run -p lumen-cli --example hello_agent
 ```
 
-This demo walks through a 3-step sequence — echo, add, and jailbreak blocking — showing all [four security pillars](INTRODUCTION_KR.md#four-core-pillars) in action.
+This demo walks through a 3-step sequence — echo, add, and jailbreak blocking — showing all [four security pillars](INTRODUCTION.md#four-core-pillars) in action.
 
 ## CLI Usage
 
