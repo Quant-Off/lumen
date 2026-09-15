@@ -151,11 +151,12 @@ impl LlamaServerProcess {
         // 외부 환경에서 숨은 인자를 주입하지 못하도록 LLAMA_ARG_* 를 전부
         // 제거한 뒤 API 키만 다시 설정합니다.
         for (k, _) in std::env::vars_os() {
-            if k.to_string_lossy().starts_with("LLAMA_ARG_") {
+            let name = k.to_string_lossy();
+            if name.starts_with("LLAMA_ARG_") || name == "LLAMA_API_KEY" {
                 cmd.env_remove(&k);
             }
         }
-        cmd.env("LLAMA_ARG_API_KEY", api_key.as_str());
+        cmd.env("LLAMA_API_KEY", api_key.as_str());
         cmd.stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

@@ -56,7 +56,9 @@ $ cmake --build build --config Release -t llama-server
 $ ls build/bin/llama-server
 ```
 
-최근 릴리즈면 어느 것이든 동작합니다. Lumen 은 `/health`, `/props`, `/completion` 과 `LLAMA_ARG_API_KEY` 환경변수만 사용합니다.
+최근 릴리즈면 어느 것이든 동작합니다. Lumen 은 `/health`, `/props`, `/completion` 과 `LLAMA_API_KEY` 환경변수만 사용합니다.
+
+검증된 조합은 llama.cpp b10603 (macOS arm64, Metal) 과 Qwen3.8-27B UD-Q6_K_XL 입니다. spawn 과 attach 두 모드, 비스트리밍 `/completion` 과 SSE 스트리밍, GBNF 도구 호출 문법, API 키 거부 (401) 를 `lumen run` 과 라이브러리 경로 양쪽에서 확인했습니다.
 
 ---
 

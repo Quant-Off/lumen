@@ -90,7 +90,7 @@ flowchart LR
 | 엔진 바이너리 | `spawn` 전 BLAKE3 핀 검사. 일반 파일이 아니면 거부 | `llama::process::verify_binary` |
 | 모델 가중치 | `VerifiedModelLoader` (BLAKE3 + 선택적 Ed25519). 엔진은 `VerifiedModelHandle` 만 받음 | `loader` |
 | 서빙 모델 = 검증 모델 | `/props.model_path` 를 정규화해 핸들과 비교. 필드 없으면 거부 | `LlamaServerEngine::from_config` |
-| 요청 인증 | 프로세스별 난수 API 키를 `LLAMA_ARG_API_KEY` 로 전달 (argv 금지), `Authorization: Bearer` 로 송신 | `process`, `llama` |
+| 요청 인증 | 프로세스별 난수 API 키를 `LLAMA_API_KEY` 로 전달 (argv 금지), `Authorization: Bearer` 로 송신 | `process`, `llama` |
 | 인자 주입 | 자식 환경에서 `LLAMA_ARG_*` 전부 제거. `extra_args` 의 `--api-key`, `-m`, `--host`, `--port`, `-hf`, `--model-url` 거부 | `process` |
 | 전송 | 기본 Unix 도메인 소켓. TCP 는 loopback 만 허용, 파싱과 접속 시 모두 거부 | `Endpoint` |
 | 응답 처리 | 헤더 16 KiB, 바디 64 MiB, SSE 이벤트 4 MiB 상한, chunked 프레이밍 검증, 요청·유휴 타임아웃 | `http`, `llama` |

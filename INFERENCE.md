@@ -90,7 +90,7 @@ Two launch modes exist. **Spawn** is the production path: Lumen verifies the bin
 | Engine binary | BLAKE3 pin checked before `spawn`; not a regular file -> refuse | `llama::process::verify_binary` |
 | Model weights | `VerifiedModelLoader` (BLAKE3 + optional Ed25519); engines only accept `VerifiedModelHandle` | `loader` |
 | Served model = verified model | `/props.model_path` canonicalised and compared with the handle; missing field -> refuse | `LlamaServerEngine::from_config` |
-| Request authentication | Per-process random API key, passed through `LLAMA_ARG_API_KEY` (never argv), sent as `Authorization: Bearer` | `process`, `llama` |
+| Request authentication | Per-process random API key, passed through `LLAMA_API_KEY` (never argv), sent as `Authorization: Bearer` | `process`, `llama` |
 | Argument injection | All `LLAMA_ARG_*` variables removed from the child environment; `--api-key`, `-m`, `--host`, `--port`, `-hf`, `--model-url` refused in `extra_args` | `process` |
 | Transport | Unix domain socket by default; TCP only to loopback, refused otherwise at parse and connect time | `Endpoint` |
 | Response handling | 16 KiB header cap, 64 MiB body cap, 4 MiB SSE event cap, chunked-framing validation, per-request and idle timeouts | `http`, `llama` |

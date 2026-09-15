@@ -56,7 +56,9 @@ $ cmake --build build --config Release -t llama-server
 $ ls build/bin/llama-server
 ```
 
-Any recent release works; Lumen relies only on `/health`, `/props`, `/completion` and the `LLAMA_ARG_API_KEY` environment variable.
+Any recent release works; Lumen relies only on `/health`, `/props`, `/completion` and the `LLAMA_API_KEY` environment variable.
+
+The verified combination is llama.cpp b10603 (macOS arm64, Metal) with Qwen3.8-27B UD-Q6_K_XL. Both spawn and attach modes, non-streaming `/completion` and SSE streaming, the GBNF tool-call grammar, and API key rejection (401) were exercised through `lumen run` and the library path.
 
 ---
 
