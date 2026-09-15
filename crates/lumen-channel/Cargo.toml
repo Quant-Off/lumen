@@ -15,7 +15,7 @@ workspace = true
 
 [features]
 default = []
-crypto-channel = ["dep:elib-aes", "dep:elib-x25519", "dep:elib-zeroize"]
+crypto-channel = ["dep:aes-gcm", "dep:x25519-dalek", "dep:zeroize"]
 
 [dependencies]
 lumen-core.workspace = true
@@ -25,9 +25,9 @@ tokio = { workspace = true }
 serde = { workspace = true }
 postcard.workspace = true
 thiserror.workspace = true
-elib-aes = { workspace = true, optional = true }
-elib-x25519 = { workspace = true, optional = true }
-elib-zeroize = { workspace = true, optional = true }
+aes-gcm = { workspace = true, optional = true }
+x25519-dalek = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

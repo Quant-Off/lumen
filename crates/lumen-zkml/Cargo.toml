@@ -21,7 +21,7 @@ ezkl = []
 lumen-core.workspace = true
 serde = { workspace = true }
 postcard.workspace = true
-elib-blake.workspace = true
+blake3.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 

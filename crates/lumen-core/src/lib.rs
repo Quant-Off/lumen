@@ -18,5 +18,5 @@ pub use crypto::{Signature, SigningKey, VerifyingKey};
 pub use error::{Error, Result};
 pub use hash::Blake3Hash;
 pub use ids::{AgentId, CapabilityId, RequestId, ToolId};
-pub use rng::{HashDrbg, OsRng, Rng};
+pub use rng::{ChaChaDrbg, OsRng, Rng};
 pub use time::Timestamp;

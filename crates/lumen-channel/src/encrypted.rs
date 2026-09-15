@@ -25,19 +25,19 @@
 //! **기밀성** 은 없습니다. 이 모듈은 동일한 ed25519 핀을 재사용해 KEX 를
 //! 인증하면서 기밀성을 추가합니다.
 //!
-//! 폐쇄형(Air-Gapped) K0 마이크로커널 환경 호환을 위해 모든
-//! 암호 프리미티브는 `elib-k0-nt` 모듈을 사용합니다 - AES-GCM 은
-//! `elib-k0-nt/aes::AES256GCM`, ECDH 는 `elib-k0-nt/x25519`, KDF 는
+//! 모든 암호 프리미티브는 공개 감사 이력이 있는 크레이트를 사용합니다.
+//! AES-GCM 은 RustCrypto `aes-gcm`, ECDH 는 `x25519-dalek`, KDF 는
 //! `lumen_core::hash::blake3_keyed_derive_32` (BLAKE3 keyed 모드).
 
+use aes_gcm::aead::AeadInOut;
+use aes_gcm::{Aes256Gcm, KeyInit};
 use async_trait::async_trait;
-use elib_aes::{AES256GCM, GCM_NONCE_SIZE, GCM_TAG_SIZE};
-use elib_x25519::{PublicKey as X25519Public, SecretKey as X25519Secret};
-use elib_zeroize::Zeroize;
 use lumen_core::hash::blake3_keyed_derive_32;
 use lumen_core::rng::{OsRng, Rng};
 use lumen_core::{Error, Result, Signature, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use x25519_dalek::{PublicKey as X25519Public, StaticSecret as X25519Secret};
+use zeroize::Zeroize;
 
 use crate::SecureChannel;
 
@@ -50,6 +50,14 @@ const KDF_LABEL_RESPONDER: &[u8] = b"lumen.encrypted.k-r2i.v1";
 
 /// 서명 도메인 분리자 - ed25519 가 임시 x25519 공개키에 서명할 때 사용.
 const KEX_SIGN_DOMAIN: &[u8] = b"lumen.encrypted.kex-bind.v1";
+
+/// AES-GCM 96 비트 nonce 길이.
+const GCM_NONCE_SIZE: usize = 12;
+/// AES-GCM 128 비트 인증 태그 길이.
+const GCM_TAG_SIZE: usize = 16;
+
+type GcmNonce = aes_gcm::aead::Nonce<Aes256Gcm>;
+type GcmTag = aes_gcm::aead::Tag<Aes256Gcm>;
 
 /// 와이어 hello (서명 *대상* 평문).
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -79,8 +87,7 @@ struct SignedEncryptedHello {
 struct EncryptedFrame {
     /// 송신 측 카운터; 수신 측은 정확히 다음 기대값과 일치해야 합니다.
     seq: u64,
-    /// AEAD 출력 (ciphertext || tag) - 외부 와이어 호환을 위해 elib-k0-nt
-    /// 의 (ciphertext, tag) 쌍을 단일 바이트열로 직렬화한 것.
+    /// AEAD 출력 (ciphertext || tag).
     ciphertext: Vec<u8>,
 }
 
@@ -91,9 +98,9 @@ struct EncryptedFrame {
 pub struct EncryptedChannel<C: SecureChannel> {
     inner: C,
     /// 송신용 키 (자기 → 피어).
-    tx_cipher: AES256GCM,
+    tx_cipher: Aes256Gcm,
     /// 수신용 키 (피어 → 자기).
-    rx_cipher: AES256GCM,
+    rx_cipher: Aes256Gcm,
     /// 자신의 역할 (initiator=0, responder=1) - nonce 첫 바이트로 사용.
     my_role: u8,
     /// 피어의 역할 - 수신 시 nonce 검증.
@@ -146,9 +153,9 @@ impl<C: SecureChannel> EncryptedChannel<C> {
         // 메모리 덤프에서 ephemeral 비밀이 회수되지 않도록 합니다.
         let mut eph_seed = [0u8; 32];
         OsRng.fill_bytes(&mut eph_seed);
-        let my_eph = X25519Secret::from_bytes(eph_seed);
+        let my_eph = X25519Secret::from(eph_seed);
         eph_seed.zeroize();
-        let my_eph_pub = my_eph.public_key();
+        let my_eph_pub = X25519Public::from(&my_eph);
         let mut nonce16 = [0u8; 16];
         OsRng.fill_bytes(&mut nonce16);
 
@@ -196,20 +203,20 @@ impl<C: SecureChannel> EncryptedChannel<C> {
         peer_vk.verify(&peer_payload, &peer.signature)?;
 
         // x25519 ECDH.
-        let peer_x25519 = X25519Public::from_bytes(peer.hello.ephemeral_x25519);
+        let peer_x25519 = X25519Public::from(peer.hello.ephemeral_x25519);
         let shared = my_eph.diffie_hellman(&peer_x25519);
 
-        // RFC 7748 권고: 모든 비트가 0 인 공유 비밀은 비여직성(non-contributory)
-        // 키 합의를 의미하므로 거부합니다.
-        if shared.is_zero() {
+        // RFC 7748 권고: 소차수 점에서 유도된 비기여(non-contributory) 공유
+        // 비밀은 거부합니다.
+        if !shared.was_contributory() {
             return Err(Error::Crypto(
-                "encrypted: x25519 produced all-zero shared secret".into(),
+                "encrypted: x25519 produced non-contributory shared secret".into(),
             ));
         }
 
         // 디렉션별 키 도출. initiator → responder 와 responder → initiator
         // 두 개를 만들고, 자신의 송신/수신을 그에 매핑합니다.
-        // AES256GCM 이 키를 라운드키로 확장한 직후 원본 32 바이트 사본을
+        // Aes256Gcm 이 키를 라운드키로 확장한 직후 원본 32 바이트 사본을
         // zeroize 하여 스택 잔류 비밀을 최소화합니다.
         let mut key_i2r = derive_key(shared.as_bytes(), KDF_LABEL_INITIATOR, epoch);
         let mut key_r2i = derive_key(shared.as_bytes(), KDF_LABEL_RESPONDER, epoch);
@@ -218,8 +225,8 @@ impl<C: SecureChannel> EncryptedChannel<C> {
         } else {
             (key_r2i, key_i2r, 0u8)
         };
-        let tx_cipher = AES256GCM::new(&tx_key);
-        let rx_cipher = AES256GCM::new(&rx_key);
+        let tx_cipher = Aes256Gcm::new(&tx_key.into());
+        let rx_cipher = Aes256Gcm::new(&rx_key.into());
         tx_key.zeroize();
         rx_key.zeroize();
         key_i2r.zeroize();
@@ -253,11 +260,12 @@ impl<C: SecureChannel> SecureChannel for EncryptedChannel<C> {
     async fn send_bytes(&mut self, bytes: Vec<u8>) -> Result<()> {
         let nonce = build_nonce(self.my_role, self.next_send_seq);
         let aad = aad_bytes(self.epoch, self.my_role);
-        let mut ciphertext = vec![0u8; bytes.len()];
-        let mut tag = [0u8; GCM_TAG_SIZE];
-        self.tx_cipher
-            .encrypt(&nonce, &aad, &bytes, &mut ciphertext, &mut tag);
-        // 와이어 포맷: ciphertext || tag (구버전 aes-gcm 0.10 호환).
+        let mut ciphertext = bytes;
+        let tag = self
+            .tx_cipher
+            .encrypt_inout_detached(&nonce, &aad, ciphertext.as_mut_slice().into())
+            .map_err(|_| Error::Crypto("encrypted: AEAD encryption failed".into()))?;
+        // 와이어 포맷: ciphertext || tag.
         ciphertext.extend_from_slice(&tag);
 
         let frame = EncryptedFrame {
@@ -287,19 +295,16 @@ impl<C: SecureChannel> SecureChannel for EncryptedChannel<C> {
         }
         let nonce = build_nonce(self.peer_role, frame.seq);
         let aad = aad_bytes(self.epoch, self.peer_role);
-        let split = frame.ciphertext.len() - GCM_TAG_SIZE;
-        let (ct, tag_slice) = frame.ciphertext.split_at(split);
-        let mut tag = [0u8; GCM_TAG_SIZE];
-        tag.copy_from_slice(tag_slice);
-        let mut plaintext = vec![0u8; ct.len()];
-        let ok = self
-            .rx_cipher
-            .decrypt(&nonce, &aad, ct, &tag, &mut plaintext);
-        if !ok {
-            return Err(Error::Crypto(
-                "encrypted: AEAD authentication failed".into(),
-            ));
-        }
+        let mut plaintext = frame.ciphertext;
+        let tag_bytes = plaintext.split_off(plaintext.len() - GCM_TAG_SIZE);
+        let tag_arr: [u8; GCM_TAG_SIZE] = tag_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| Error::Crypto("encrypted: malformed GCM tag".into()))?;
+        let tag = GcmTag::from(tag_arr);
+        self.rx_cipher
+            .decrypt_inout_detached(&nonce, &aad, plaintext.as_mut_slice().into(), &tag)
+            .map_err(|_| Error::Crypto("encrypted: AEAD authentication failed".into()))?;
         self.next_recv_seq = self
             .next_recv_seq
             .checked_add(1)
@@ -322,12 +327,12 @@ fn derive_key(shared: &[u8; 32], label: &[u8], epoch: u64) -> [u8; 32] {
     blake3_keyed_derive_32(shared, label, &epoch.to_le_bytes())
 }
 
-fn build_nonce(role: u8, seq: u64) -> [u8; GCM_NONCE_SIZE] {
+fn build_nonce(role: u8, seq: u64) -> GcmNonce {
     let mut n = [0u8; GCM_NONCE_SIZE];
     n[0] = role;
     // n[1..4] 은 0 으로 둡니다 - 카운터 오버플로 시 명시적 거부.
     n[4..12].copy_from_slice(&seq.to_le_bytes());
-    n
+    GcmNonce::from(n)
 }
 
 fn aad_bytes(epoch: u64, sender_role: u8) -> [u8; 16] {

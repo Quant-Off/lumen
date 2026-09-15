@@ -51,14 +51,21 @@ toml = "0.8"
 postcard = { version = "1", default-features = false, features = ["use-std"] }
 hex = "0.4"
 
-# Crypto 
-elib-blake = { package = "blake", path = "../elib-k0-nt/blake", version = "1.0.0" }
-elib-ed25519 = { package = "ed25519", path = "../elib-k0-nt/ed25519", version = "1.0.0" }
-elib-x25519 = { package = "x25519", path = "../elib-k0-nt/x25519", version = "1.0.0" }
-elib-aes = { package = "aes", path = "../elib-k0-nt/aes", version = "1.0.0" }
-elib-rng = { package = "rng", path = "../elib-k0-nt/rng", version = "1.0.0" }
-elib-constant-time = { package = "constant-time", path = "../elib-k0-nt/constant-time", version = "1.0.0" }
-elib-zeroize = { package = "zeroize", path = "../elib-k0-nt/zeroize", version = "1.0.0" }
+# Crypto
+# 이슈 #2: 기본 암호 모듈은 반드시 검증된 구현이어야 합니다. 이전의 in-house
+# `../elib-k0-nt/*` path dependency 는 모두 공개 감사 이력이 있는 RustCrypto /
+# dalek-cryptography / BLAKE3 공식 크레이트로 교체되었습니다. 모든 외부
+# 크레이트 소스는 `vendor/` 에 고정(source replacement, `.cargo/config.toml`)
+# 되어 폐쇄망에서도 네트워크 없이 동일 비트로 빌드됩니다.
+blake3 = { version = "1.8", default-features = false, features = ["std"] }
+ed25519-dalek = { version = "3", default-features = false, features = ["fast", "zeroize"] }
+x25519-dalek = { version = "3", default-features = false, features = ["precomputed-tables", "static_secrets", "zeroize"] }
+aes-gcm = { version = "0.11", default-features = false, features = ["aes", "alloc", "zeroize"] }
+subtle = { version = "2.6", default-features = false }
+zeroize = { version = "1.8", default-features = false, features = ["zeroize_derive"] }
+getrandom = { version = "0.4", default-features = false }
+chacha20 = { version = "0.10", default-features = false, features = ["rng", "zeroize"] }
+rand_core = { version = "0.10", default-features = false }
 
 # Defense / matchers
 aho-corasick = "1"
@@ -86,9 +93,6 @@ clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
-# Q. T. Felix NOTE: AES-GCM / x25519는 elib-k0-nt 모듈을 사용하므로 별도 외부
-#                   크레이트가 필요하지 않음(위 elib-aes / elib-x25519 워크스페이스 정의 사용)
-
 # Dev / bench
 criterion = "0.5"
 
@@ -103,16 +107,15 @@ criterion = "0.5"
 #     `lumen_inference::BpeTokenizer` 를 사용하고, 전체 LLM 생성은
 #     `llama-cpp` 백엔드 또는 호스트 TEE 의 ChannelEngine forward 경로를
 #     사용합니다.
-#   - `rand` / `rand_core` : `lumen_core::rng` (HashDRBG 어댑터) 로 대체.
+#   - `rand` : `lumen_core::rng` (getrandom + ChaCha20 DRBG 어댑터) 로 대체.
 
 [workspace.lints.rust]
 # Q. T. Felix NOTE: 모든 경고를 deny 로 격상해 lumen 멤버 크레이트의 게이트로
 #                   사용합니다. 과거에는 CI의 `RUSTFLAGS=-D warnings`로 같은
-#                   효과를 냈으나, 그 방식은 워크스페이스 외부 path dep
-#                   (`elib-k0-nt/*`) 까지 격상시켜 외부 변경에 lumen CI가
-#                   끌려갔습니다. lints 테이블은 `[lints] workspace = true`
-#                   를 선언한 멤버에만 적용되므로 외부 path dep에 영향을
-#                   주지 않습니다. priority -2로 가장 먼저 emit시켜 이후
+#                   효과를 냈으나, 그 방식은 워크스페이스 외부 의존성 컴파일
+#                   에도 그대로 적용되어 외부 변경에 lumen CI가 끌려갔습니다.
+#                   lints 테이블은 `[lints] workspace = true` 를 선언한
+#                   멤버에만 적용되므로 외부 크레이트에 영향을 주지 않습니다. priority -2로 가장 먼저 emit시켜 이후
 #                   특정 lint(warn 레벨)가 자유롭게 덮어쓸 수 있도록 합니다.
 warnings = { level = "deny", priority = -2 }
 unsafe_code = "deny"
