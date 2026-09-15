@@ -282,6 +282,8 @@ Lumen이 방어하는 공격은 카테고리별로 다음과 같습니다.
 
 **v0.4**(완료) 마일스톤은 온체인(Mina 또는 EVM) 검증기 emit + 배포 자동화 (`lumen-onchain` 크레이트와 `lumen verifier emit/deploy` 서브커맨드), capability-gated 인터-에이전트 메시징 (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 채널 암호화 (mutual-authenticated ephemeral KEX, blake3 KDF, direction-별 키, deterministic nonce), Rust -> WASM 에이전트 SDK (`#[lumen_agent]` proc macro - `lumen-sdk-macros` 크레이트), 모델 핀 자동 회전(`PinSet` + grace period로 무중단 배포), 그리고 **LLM 추론 파이프라인 구현**(`CandleLlmEngine`: GGUF 양자화 가중치 + HuggingFace 토크나이저 + 토큰 단위 스트리밍, `StreamingEngine` trait, `VerifiedModelLoader` 검증 강제, `QuantizationConfig` GGUF/FixedPoint/Int8, `BackendConfig` 팩토리, GGUF 헤더 provenance 검증)을 추가합니다.
 
+**v0.5**(완료) 마일스톤은 기본 암호 모듈의 검증성 확보([이슈 #2](https://github.com/Quant-Off/lumen/issues/2))에 집중했습니다. in-house `elib-k0-nt` path 의존성을 공개 감사 이력이 있는 크레이트로 전부 교체하고(`blake3`, `ed25519-dalek` strict 검증, `x25519-dalek` contributory 검사, RustCrypto `aes-gcm`, `getrandom` + `chacha20` DRBG, `subtle`, `zeroize`), BLAKE3 공식 벡터 / RFC 8032 / RFC 7748 / NIST GCM 표준 벡터 KAT 회귀 테스트(`crypto_kat.rs`)를 추가했습니다. 또한 모든 외부 크레이트 소스를 `vendor/` 에 고정하고 `.cargo/config.toml` 로 source replacement + `net.offline` 을 강제해 온라인 / 폐쇄망 어디서든 동일 소스로 빌드되도록 했습니다.
+
 **v1.0**(목표)는 정부 또는 규제 환경에서 production 배포, [FIPS 140-3 compliance audit](https://csrc.nist.gov/pubs/fips/140-3/final), [Kani](https://www.in-com.com/ko/blog/the-rust-developers-toolbox-best-static-code-analysis-tools/#Kani) 또는 [Prusti](https://github.com/viperproject/prusti-dev) 등을 활용한 일부 모듈의 형식 검증, 외부 보안 audit 1회 통과를 목표로 합니다. 정식 통과되지 않아도 여전히 공개하겠습니다. 물론 검증되지 않았다는 표시를 명확히 하겠습니다.
 
 ## 참고 문헌과 관련 프로젝트
