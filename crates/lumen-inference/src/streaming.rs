@@ -19,8 +19,9 @@ use crate::SamplingParams;
 /// 단일 생성 토큰.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Token {
-    /// 어휘 ID (모델 vocabulary 인덱스).
-    pub id: u32,
+    /// 어휘 ID (모델 vocabulary 인덱스). 백엔드가 제공하지 않거나 한 조각이
+    /// 여러 토큰을 담으면 `None`.
+    pub id: Option<u32>,
     /// 디코딩된 UTF-8 조각. BPE 바이트 폴백 포함.
     pub text: String,
     /// 로그 확률 (백엔드가 지원하는 경우).

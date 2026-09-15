@@ -12,7 +12,9 @@ use async_trait::async_trait;
 use lumen_core::{Result, ToolId};
 use serde::Serialize;
 
-use crate::{Completion, InferenceEngine, SamplingParams, ToolCall};
+use crate::{
+    Completion, EngineCapabilities, EngineInfo, InferenceEngine, SamplingParams, ToolCall,
+};
 
 /// Dummy 엔진 - 무상태 결정론적.
 #[derive(Clone, Debug, Default)]
@@ -72,6 +74,21 @@ impl InferenceEngine for DummyEngine {
                 ),
                 tool_call: None,
             })
+        }
+    }
+
+    fn info(&self) -> EngineInfo {
+        EngineInfo {
+            backend: "dummy".into(),
+            model: None,
+            capabilities: EngineCapabilities {
+                streaming: false,
+                seed_deterministic: true,
+                grammar: false,
+                logprobs: false,
+                native_tool_calls: true,
+            },
+            max_context: None,
         }
     }
 }

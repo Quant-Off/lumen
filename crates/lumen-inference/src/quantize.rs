@@ -2,12 +2,12 @@
 //!
 //! Lumen 은 두 가지 양자화 경로를 제공합니다:
 //!
-//! - **GGUF** (`QuantizationKind::Gguf`): candle-transformers / llama.cpp 의
+//! - **GGUF** (`QuantizationKind::Gguf`): llama.cpp 의
 //!   GGUF 포맷. 추론 속도를 극대화하며, ZK 경로 밖에서 실행됩니다.
 //! - **FixedPoint** (`QuantizationKind::FixedPoint`): `lumen-fixed` 의 Q-형식
 //!   정수 산술. 연산이 ZK witness 에 바인딩되어야 하는 도구 라우팅 경로에
 //!   사용됩니다. ZK 바이너리에서는 FPU 를 절대 건드리지 않습니다.
-//! - **Int8**: candle 의 i8 텐서. 빠르지만 결정론 보장 없음.
+//! - **Int8**: 백엔드 네이티브 i8 텐서. 빠르지만 결정론 보장 없음.
 
 use serde::{Deserialize, Serialize};
 
@@ -44,11 +44,11 @@ pub enum FixedPointPrecision {
 pub enum QuantizationKind {
     /// 양자화 없음 — f32 full precision.
     None,
-    /// candle i8 텐서 (빠르지만 비결정론적).
+    /// 백엔드 네이티브 i8 텐서 (빠르지만 비결정론적).
     Int8,
     /// ZK 증명 경로용 `lumen-fixed` 고정소수점.
     FixedPoint(FixedPointPrecision),
-    /// GGUF 포맷 가중치 (candle-transformers / llama.cpp).
+    /// GGUF 포맷 가중치 (llama.cpp).
     Gguf(GgufLevel),
 }
 

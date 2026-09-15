@@ -8,7 +8,8 @@ use lumen_capability::{Action, Capability, PolicyEngine};
 use lumen_core::{AgentId, Blake3Hash, Error, Result, Timestamp, ToolId};
 use lumen_defense::{DefenseEngine, Verdict};
 use lumen_inference::{
-    Completion, FinishReason, InferenceEngine, SamplingParams, StreamingEngine, Token, TokenStream,
+    parse_tool_call, Completion, Engines, FinishReason, InferenceEngine, SamplingParams,
+    StreamingEngine, Token, TokenStream,
 };
 use lumen_zkml::mock::{verify_with_witness, MockProof, MockVk};
 use lumen_zkml::ProvingSystem;
@@ -274,7 +275,7 @@ fn build_stream<'a>(
                                     // 빈 dummy 이벤트 대신 바로 finalize 로 전환합니다.
                                     // 다음 poll 에서 Complete 를 방출합니다.
                                     Ok(StreamEvent::Token(Token {
-                                        id: 0,
+                                        id: None,
                                         text: String::new(),
                                         logprob: None,
                                         finish_reason: Some(FinishReason::Eos),
@@ -285,9 +286,12 @@ fn build_stream<'a>(
                         }
                     }
                     State::Finalizing { accumulated } => {
+                        // 스트리밍 백엔드는 텍스트만 넘기므로 도구 호출 규약
+                        // (`{"tool": .., "args": ..}`) 을 여기서 파싱합니다.
+                        let tool_call = parse_tool_call(&accumulated);
                         let completion = Completion {
                             text: accumulated,
-                            tool_call: None,
+                            tool_call,
                         };
                         let result = runtime_ref
                             .finalize_step(completion, verdict.clone(), &prompt)
@@ -325,6 +329,16 @@ impl AgentRuntimeBuilder {
     /// 스트리밍 엔진을 제공하면 [`AgentRuntime::stream_step`] 이 활성화됩니다.
     pub fn streaming_engine(mut self, engine: Arc<dyn StreamingEngine>) -> Self {
         self.streaming = Some(engine);
+        self
+    }
+
+    /// 백엔드 팩토리가 돌려준 [`Engines`] 묶음을 한 번에 wiring 합니다.
+    ///
+    /// `inference` 는 항상 설정되고, `streaming` 은 백엔드가 지원할 때만
+    /// 설정됩니다.
+    pub fn engines(mut self, engines: Engines) -> Self {
+        self.inference = Some(engines.inference);
+        self.streaming = engines.streaming;
         self
     }
 

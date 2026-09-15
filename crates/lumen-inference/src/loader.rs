@@ -41,7 +41,8 @@ impl VerifiedModelHandle {
 ///
 /// let loader = VerifiedModelLoader::hash_only();
 /// let handle = loader.load(&path, &manifest)?;
-/// let engine = CandleLlmEngine::from_gguf(&handle, tokenizer_path)?;
+/// let spec = SpawnSpec::new(binary, binary_hash, handle, endpoint);
+/// let engine = LlamaServerEngine::from_config(LlamaServerConfig::spawn(spec)).await?;
 /// ```
 pub struct VerifiedModelLoader {
     trusted_signers: Vec<VerifyingKey>,
