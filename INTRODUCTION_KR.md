@@ -224,7 +224,7 @@ flowchart TD
     CLI --> ONC[lumen-onchain<br/>EVM · Mina verifier emit]
     ORCH <--> AG
     AG --> DEF[lumen-defense]
-    AG --> INF[lumen-inference<br/>Dummy · ChannelEngine · llama.cpp stub]
+    AG --> INF[lumen-inference<br/>Dummy · ChannelEngine · llama-server]
     AG --> ZK[lumen-zkml<br/>Mock commitment · ezkl stub]
     AG --> CAP[lumen-capability]
     ORCH --> CH[lumen-channel]
@@ -242,7 +242,7 @@ flowchart TD
 `AgentRuntime::step(prompt) -> StepResult`의 한 스텝은 정해진 순서로 진행됩니다. 스트리밍이 필요한 경우 `AgentRuntime::stream_step(prompt)` 를 사용하면 `StreamEvent::Token` 이벤트가 토큰 단위로 방출되고, 스트림 종료 시 `StreamEvent::Complete(Box<StepResult>)` 가 전달됩니다.
 
 - **Defense** 단계: `DefenseEngine::analyze(prompt)`가 호출되고 `Verdict::Block`이면 즉시 단축되어 `StepResult`에 `defense_verdict`가 기록됩니다.
-- **Inference** 단계: `InferenceEngine::complete(prompt, params)`가 `Completion { text, tool_call }`을 반환합니다. `StreamingEngine` 을 구현한 백엔드는 `stream_complete` 로 토큰 스트림을 생성합니다. 현재는 `llama-cpp` feature 뒤의 `LlamaCppEngine` 인터페이스 스텁만 해당하며, 기본 `DummyEngine` 과 TEE 포워더 `ChannelEngine` 은 비스트리밍입니다.
+- **Inference** 단계: `InferenceEngine::complete(prompt, params)`가 `Completion { text, tool_call }`을 반환합니다. `StreamingEngine` 을 구현한 백엔드는 `stream_complete` 로 토큰 스트림을 생성합니다. `LlamaServerEngine`(`llama-server` feature)과 TEE 포워더 `ChannelEngine` 은 스트리밍을 지원하고, 기본 `DummyEngine` 은 지원하지 않습니다. 백엔드는 `BackendRegistry` 로 이름 기반 선택되며, 모델의 자유 텍스트 출력은 공통 `{"tool", "args"}` 규약으로 `ToolCall` 이 되고 GBNF 문법으로 강제할 수 있습니다. [INFERENCE_KR.md](INFERENCE_KR.md)를 참고하세요.
 - **Policy** 단계: `tool_call.is_some()`인 경우 해당 tool의 Capability를 lookup하고 `PolicyEngine::check`로 4단 검증을 수행합니다. 검증을 통과하면 **Tool 실행** 단계에서 호스트 측 `ToolHandler::call(args_json)`이 호출되고 JSON 출력이 캡처됩니다.
 - **Routing decision 구축** 단계: 다음과 같은 public 입력과 witness가 결정됩니다.
 
@@ -290,6 +290,8 @@ Lumen이 방어하는 공격은 카테고리별로 다음과 같습니다.
 **v0.4**(완료) 마일스톤은 온체인(Mina 또는 EVM) 검증기 emit + 배포 자동화 (`lumen-onchain` 크레이트와 `lumen verifier emit/deploy` 서브커맨드), capability-gated 인터-에이전트 메시징 (`Resource::AgentMessage(AgentId)` + `Orchestrator::with_policy`), AES-GCM-256 + x25519 채널 암호화 (mutual-authenticated ephemeral KEX, blake3 KDF, direction-별 키, deterministic nonce), Rust -> WASM 에이전트 SDK (`#[lumen_agent]` proc macro - `lumen-sdk-macros` 크레이트), 모델 핀 자동 회전(`PinSet` + grace period로 무중단 배포), 그리고 **LLM 추론 파이프라인 구현**(`CandleLlmEngine`: GGUF 양자화 가중치 + HuggingFace 토크나이저 + 토큰 단위 스트리밍, `StreamingEngine` trait, `VerifiedModelLoader` 검증 강제, `QuantizationConfig` GGUF/FixedPoint/Int8, `BackendConfig` 팩토리, GGUF 헤더 provenance 검증)을 추가합니다. candle 기반 엔진은 v0.5 에서 제거됐습니다.
 
 **v0.5**(완료) 마일스톤은 기본 암호 모듈의 검증성 확보([이슈 #2](https://github.com/Quant-Off/lumen/issues/2))에 집중했습니다. in-house `elib-k0-nt` path 의존성을 공개 감사 이력이 있는 크레이트로 전부 교체하고(`blake3`, `ed25519-dalek` strict 검증, `x25519-dalek` contributory 검사, RustCrypto `aes-gcm`, `getrandom` + `chacha20` DRBG, `subtle`, `zeroize`), BLAKE3 공식 벡터 / RFC 8032 / RFC 7748 / NIST GCM 표준 벡터 KAT 회귀 테스트(`crypto_kat.rs`)를 추가했습니다. 같은 주기에 폐쇄망 빌드를 위해 의존성 표면도 줄였습니다. halo2 백엔드(`MockProver` 전용, ZK 보장 없음)와 candle / HuggingFace `tokenizers` 추론 경로를 제거하고, 그 자리에 `llama-cpp` 백엔드 인터페이스 스텁과 자체 byte-level BPE 토크나이저(GGUF 메타데이터 또는 GPT-2 `vocab.json` + `merges.txt`, 결정성을 위해 `BTreeMap` 만 사용)를 두었으며, RUSTSEC 권고 해소를 위해 wasmtime 을 48 로 올렸습니다. 또한 모든 외부 크레이트 소스를 `vendor/` 에 고정하고 `.cargo/config.toml` 로 source replacement + `net.offline` 을 강제해 온라인 / 폐쇄망 어디서든 동일 소스로 빌드되도록 했습니다.
+
+**v0.6**(진행 중) 마일스톤은 첫 production 추론 엔진을 올립니다. llama.cpp 의 `llama-server` 를 BLAKE3 핀된 별도 프로세스로 Lumen 이 직접 기동·감독하며, 순수 Rust HTTP/1.1 + SSE 클라이언트로 Unix 소켓 위에서 통신합니다(Rust 빌드에 `cmake`, `bindgen`, C 툴체인 불필요). 프로세스마다 API 키를 새로 생성하고, 자식 환경에서 `LLAMA_ARG_*` 를 제거하며, `/props` 로 서빙 모델을 검증 핸들에 바인드합니다. 그 주변에 다른 엔진을 그대로 끼울 수 있는 부품을 두었습니다. `EngineInfo` 기능 보고, `Engines` 묶음, fail-closed 파라미터 검증을 갖춘 이름 기반 `BackendRegistry`, GBNF 문법 생성기를 포함한 백엔드 독립 도구 호출 규약, 핀된 정책 파일의 `[inference]` 섹션, 그리고 TEE peer 가 어떤 백엔드든 샌드박스에 서빙할 수 있게 하는 스트리밍 프레임 기반 채널 와이어 프로토콜 v2 입니다. 설계와 대안 조사(in-process FFI, candle, ONNX Runtime, tract, OpenAI 호환 서버)는 [INFERENCE_KR.md](INFERENCE_KR.md)에 기록되어 있습니다.
 
 **v1.0**(목표)는 정부 또는 규제 환경에서 production 배포, [FIPS 140-3 compliance audit](https://csrc.nist.gov/pubs/fips/140-3/final), [Kani](https://www.in-com.com/ko/blog/the-rust-developers-toolbox-best-static-code-analysis-tools/#Kani) 또는 [Prusti](https://github.com/viperproject/prusti-dev) 등을 활용한 일부 모듈의 형식 검증, 외부 보안 audit 1회 통과를 목표로 합니다. 정식 통과되지 않아도 여전히 공개하겠습니다. 물론 검증되지 않았다는 표시를 명확히 하겠습니다.
 
