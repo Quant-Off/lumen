@@ -64,22 +64,39 @@ $ ls build/bin/llama-server
 
 ## 2. 엔진 바이너리 준비
 
-Lumen 은 BLAKE3 해시가 핀과 다른 엔진은 기동을 거부하므로, 신뢰된 머신에서 한 번 해시합니다.
+Lumen 은 핀된 매니페스트와 다른 엔진은 기동을 거부하며, 매니페스트는 서명되어 있어 정책 파일을 고칠 수 있는 사람이라도 다른 바이너리를 승인할 수 없습니다. 신뢰된 머신에서 한 번만 수행합니다.
+
+### 2-1. 서명 키
 
 ```bash
-$ b3sum build/bin/llama-server
-# 3f2a...  build/bin/llama-server
+$ lumen keygen --out /etc/lumen/signing.key      # 0600 으로 생성, 기존 파일은 덮어쓰지 않음
+# public key: 2a7e57c2...
 ```
 
-Lumen 프리미티브로도 가능합니다.
+공개 키는 정책 파일의 `trusted_signers` 에 넣습니다. 키 파일은 런타임 호스트 밖에 두고 공개 키만 정책과 함께 이동시킵니다.
 
-```rust
-use lumen_core::Blake3Hash;
-let hash = Blake3Hash::of_file(std::path::Path::new("/opt/llama.cpp/llama-server"))?;
-println!("{hash}");
+### 2-2. 엔진 서명
+
+실행 파일과 그것이 로드하는 공유 라이브러리를 전부 나열합니다 (`ldd`, `otool -L`). 동적 링크 빌드에서 런처만 핀하면 아무것도 핀되지 않은 것과 같습니다.
+
+```bash
+$ lumen sign-engine --name llama-server --version b10603 \
+    --binary /opt/llama.cpp/llama-server \
+    --file /opt/llama.cpp/lib/libllama.so --file /opt/llama.cpp/lib/libggml.so \
+    --license MIT --key /etc/lumen/signing.key --out engine.toml
+# engine llama-server vb10603  hash=3f2a...  files=2  signer=2a7e57c2...
 ```
 
-바이너리는 전용 사용자 소유의 읽기 전용으로 두세요. 해시는 정책 파일의 `binary_hash` 또는 `SpawnSpec::binary_hash` 에 들어갑니다.
+매니페스트는 파일마다 BLAKE3 를 핀하고 이름·버전·해시 집합 위에 detached Ed25519 서명을 둡니다. 경로는 서명하지 않으므로 파일을 옮겨도 같은 매니페스트가 유효합니다.
+
+### 2-3. 런타임 호스트에서 검증
+
+```bash
+$ lumen verify-engine --manifest engine.toml --trusted-signer 2a7e57c2...
+# OK  llama-server vb10603  hash=3f2a...  files=2  size=18542432 bytes  signer=2a7e57c2...
+```
+
+검증은 파일을 열기 전에 서명을 먼저 확인하고, 모든 파일이 일반 파일이고 world-writable 이 아니며 핀된 해시와 일치할 것을 요구합니다. 파일은 전용 사용자 소유의 읽기 전용으로 두세요. 매니페스트는 정책 파일의 `[[engines]]` 항목으로 붙여 넣거나 (4절), 코드에서는 `lumen_provenance::verify_engine` 의 결과를 `SpawnSpec::from_engine` 에 넘깁니다.
 
 ---
 
@@ -115,6 +132,14 @@ hash    = "a1b2c3..."   # 64자 hex
 $ cargo run -p lumen-cli -- verify-model --manifest model.toml --file models/qwen2.5-1.5b-q8.gguf
 ```
 
+엔진과 같은 키로 서명합니다. `sign-model` 은 서명 전에 파일을 다시 해시하므로 가중치와 해시가 다른 매니페스트에는 서명하지 않습니다.
+
+```bash
+$ lumen sign-model --manifest model.toml --key /etc/lumen/signing.key --out model_signed.toml
+```
+
+정책 파일에 `trusted_signers` 를 설정하면 미서명 모델·엔진 매니페스트는 거부됩니다.
+
 ---
 
 ## 4. 경로 A: 정책 파일과 `lumen run`
@@ -122,12 +147,25 @@ $ cargo run -p lumen-cli -- verify-model --manifest model.toml --file models/qwe
 가장 단순한 production 경로는 핀된 정책 파일에 모든 것을 선언하는 것입니다. `lumen init` 이 템플릿을 출력하며, 관련 부분은 다음과 같습니다.
 
 ```toml
+trusted_signers = ["2a7e57c2..."]   # `lumen keygen` 출력
+
 [[models]]
-name    = "qwen2.5-1.5b"
-version = "1.0"
-path    = "models/qwen2.5-1.5b-q8.gguf"
-format  = "Gguf"
-hash    = "a1b2c3..."
+name      = "qwen2.5-1.5b"
+version   = "1.0"
+path      = "models/qwen2.5-1.5b-q8.gguf"
+format    = "Gguf"
+hash      = "a1b2c3..."
+signature = "..."                   # `lumen sign-model` 출력
+signer    = "2a7e57c2..."
+
+[[engines]]
+name      = "llama-server"
+version   = "b10603"
+path      = "/opt/llama.cpp/llama-server"
+hash      = "3f2a..."
+files     = [{ path = "/opt/llama.cpp/lib/libllama.so", hash = "..." }]
+signature = "..."                   # `lumen sign-engine` 출력
+signer    = "2a7e57c2..."
 
 [inference]
 backend = "llama-server"
@@ -135,8 +173,7 @@ backend = "llama-server"
 [inference.params]
 mode        = "spawn"
 endpoint    = "unix:/run/lumen/llama.sock"
-binary      = "/opt/llama.cpp/llama-server"
-binary_hash = "3f2a..."
+binary      = "llama-server"     # 위 [[engines]] 항목을 가리킴
 model       = "qwen2.5-1.5b"     # 위 [[models]] 항목을 가리킴
 n_ctx       = "4096"
 gpu_layers  = "99"
@@ -156,9 +193,10 @@ $ cargo run -p lumen-cli -- run \
 
 1. 정책 파일의 BLAKE3 를 `--policy-hash` 와 대조합니다.
 2. 모든 `[[models]]` 매니페스트를 검증합니다.
-3. 엔진 바이너리 해시를 검사하고, 새 API 키로 Unix 소켓에 `llama-server` 를 띄우고, `/health` 를 폴링하고, `/props.model_path` 를 검증된 모델 경로와 비교합니다.
-4. 등록 도구 (`echo`, `add`) 로부터 GBNF 문법을 생성해 모든 completion 에 붙입니다.
-5. step 실행: defense, 추론, 정책 검사, 도구 실행, 라우팅 commitment.
+3. 모든 `[[engines]]` 매니페스트를 검증합니다. `trusted_signers` 로 서명을 먼저, 그 다음 핀된 파일 전부를 검사하고, 검증된 경로와 해시를 백엔드 파라미터에 치환합니다.
+4. 바이너리와 라이브러리 핀을 다시 검사하고, 새 API 키로 Unix 소켓에 `llama-server` 를 띄우고, `/health` 를 폴링하고, `/props.model_path` 를 검증된 모델 경로와 비교합니다.
+5. 등록 도구 (`echo`, `add`) 로부터 GBNF 문법을 생성해 모든 completion 에 붙입니다.
+6. step 실행: defense, 추론, 정책 검사, 도구 실행, 라우팅 commitment.
 
 이미 실행 중인 서버 (예: TEE 안 systemd 가 관리) 에 붙으려면:
 
@@ -180,10 +218,10 @@ model        = "qwen2.5-1.5b"           # 여전히 /props.model_path 로 바인
 use std::path::Path;
 use std::sync::Arc;
 
-use lumen_core::Blake3Hash;
+use lumen_core::VerifyingKey;
 use lumen_inference::llama::{Endpoint, LlamaServerConfig, LlamaServerEngine, SpawnSpec};
 use lumen_inference::{InferenceEngine, SamplingParams, VerifiedModelLoader};
-use lumen_provenance::ModelManifest;
+use lumen_provenance::{verify_engine, EngineManifest, ModelManifest};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -191,11 +229,12 @@ async fn main() -> anyhow::Result<()> {
     let manifest: ModelManifest = toml::from_str(&std::fs::read_to_string("model.toml")?)?;
     let handle = VerifiedModelLoader::hash_only().load(manifest.path.as_path(), &manifest)?;
 
-    // 2. 핀된 엔진 바이너리.
-    let binary_hash: Blake3Hash = "3f2a...".parse()?;
-    let mut spec = SpawnSpec::new(
-        "/opt/llama.cpp/llama-server",
-        binary_hash,
+    // 2. 서명된 엔진 매니페스트: 서명 -> 파일 종류와 권한 -> 해시.
+    let engine: EngineManifest = toml::from_str(&std::fs::read_to_string("engine.toml")?)?;
+    let trusted = [VerifyingKey::from_bytes(&<[u8; 32]>::try_from(hex::decode("2a7e57c2...")?)?)?];
+    let verified = verify_engine(Path::new("."), &engine, &trusted)?;
+    let mut spec = SpawnSpec::from_engine(
+        &verified,
         handle,
         Endpoint::Unix("/run/lumen/llama.sock".into()),
     );

@@ -87,7 +87,7 @@ Two launch modes exist. **Spawn** is the production path: Lumen verifies the bin
 
 | Asset or channel | Control | Where |
 |---|---|---|
-| Engine binary | BLAKE3 pin checked before `spawn`; not a regular file -> refuse | `llama::process::verify_binary` |
+| Engine binary and shared libraries | `EngineManifest`: Ed25519 signature over name, version and the whole hash set, checked against `trusted_signers` before any file is opened; every pinned file must be a regular, non-world-writable file whose BLAKE3 matches; the pins are re-checked immediately before `spawn` | `lumen_provenance::verify_engine`, `llama::process` |
 | Model weights | `VerifiedModelLoader` (BLAKE3 + optional Ed25519); engines only accept `VerifiedModelHandle` | `loader` |
 | Served model = verified model | `/props.model_path` canonicalised and compared with the handle; missing field -> refuse | `LlamaServerEngine::from_config` |
 | Request authentication | Per-process random API key, passed through `LLAMA_API_KEY` (never argv), sent as `Authorization: Bearer` | `process`, `llama` |
@@ -96,7 +96,24 @@ Two launch modes exist. **Spawn** is the production path: Lumen verifies the bin
 | Response handling | 16 KiB header cap, 64 MiB body cap, 4 MiB SSE event cap, chunked-framing validation, per-request and idle timeouts | `http`, `llama` |
 | Web surface | `--no-webui`, no metrics or slots endpoints enabled | `process` |
 | Tool selection | GBNF grammar enumerating registered tool ids; parser re-validates ids and JSON shape; args re-serialised in key order before hashing | `toolcall` |
-| Secrets in memory | API keys held in `Zeroizing<String>` | `llama` |
+| Secrets in memory | API keys and signing-key seeds held in `Zeroizing` buffers | `llama`, `lumen keygen` |
+
+### Engine manifest
+
+An engine is described the same way as a model: a signed manifest that pins the executable and every shared library it loads.
+
+```toml
+[[engines]]
+name      = "llama-server"
+version   = "b10603"
+path      = "/opt/llama.cpp/llama-server"
+hash      = "<blake3 of the executable>"
+files     = [{ path = "/opt/llama.cpp/lib/libllama.so", hash = "<blake3>" }]
+signature = "<ed25519 over the body>"
+signer    = "<signer public key>"
+```
+
+The signature covers `name`, `version`, `hash`, the `(file name, hash)` list and `license`, but not the paths, so the manifest stays valid after relocation. Verification is fail-fast and cheap: the signature (microseconds) is checked before any file is opened, then each file is checked for type and permissions, then hashed once. If `trusted_signers` is non-empty, an unsigned manifest or a signer outside the set is rejected; only with no trusted signers does a hash-only manifest pass, with a warning. `lumen keygen`, `lumen sign-engine` and `lumen verify-engine` produce and check these manifests; `lumen sign-model` signs model manifests with the same key. Both kinds use distinct domain-separation prefixes, so a model signature cannot be replayed as an engine signature.
 
 What the design does **not** claim: the host process cannot attest the memory of `llama-server`; that is the TEE's job. Plaintext HTTP is acceptable only because the socket never leaves the host; a remote engine must sit behind a `SecureChannel` peer. Operators should additionally confine `llama-server` with the OS sandbox of their platform (seccomp/Landlock, sandbox-exec, or a dedicated VM).
 
@@ -124,14 +141,24 @@ A model asks for a tool by emitting one JSON object:
 ## 7. Policy File Configuration
 
 ```toml
+trusted_signers = ["<signer public key hex>"]   # models and engines must then be signed
+
+[[engines]]
+name = "llama-server"
+version = "b10603"
+path = "/opt/llama.cpp/llama-server"
+hash = "<blake3 hex of the binary>"
+files = [{ path = "/opt/llama.cpp/lib/libllama.so", hash = "<blake3>" }]
+signature = "<hex>"
+signer = "<signer public key hex>"
+
 [inference]
 backend = "llama-server"
 
 [inference.params]
 mode        = "spawn"                       # or "attach"
 endpoint    = "unix:/run/lumen/llama.sock"  # or "tcp:127.0.0.1:8080"
-binary      = "/opt/llama.cpp/llama-server"
-binary_hash = "<blake3 hex of the binary>"
+binary      = "llama-server"                # an [[engines]] name, or a path with binary_hash
 model       = "qwen2.5-1.5b"                # a [[models]] name, or a GGUF path with model_hash
 n_ctx       = "4096"
 gpu_layers  = "99"
@@ -143,7 +170,7 @@ parallel    = "1"
 | `mode` | both | `spawn` or `attach` |
 | `endpoint` | both | `unix:<path.sock>` or `tcp:<loopback ip>:<port>` |
 | `model`, `model_hash`, `model_name`, `model_version` | both | GGUF path + BLAKE3; when `model` names a `[[models]]` entry the CLI substitutes path, hash, name and version from the manifest |
-| `binary`, `binary_hash` | spawn | engine binary and its BLAKE3 pin |
+| `binary`, `binary_hash`, `binary_files` | spawn | engine binary, its BLAKE3 pin and a JSON array of `{path, hash}` pins for shared libraries; when `binary` names an `[[engines]]` entry the CLI verifies that manifest (signature against `trusted_signers`, then every file) and substitutes all three |
 | `n_ctx`, `threads`, `gpu_layers`, `parallel`, `extra_args`, `startup_timeout_secs` | spawn | passed to `llama-server` (`-c`, `-t`, `-ngl`, `--parallel`), reserved arguments refused |
 | `api_key_file` | attach | file containing the server's API key (keep it 0600) |
 | `request_timeout_secs`, `cache_prompt`, `grammar` | both | client behaviour; `grammar` is normally injected by the CLI |
@@ -176,7 +203,7 @@ Planned adapters that fit the same skeleton:
 
 ## 10. Known Gaps and Roadmap
 
-- Engine binaries are hash-pinned but not signature-verified. Extending `ModelManifest` (Ed25519) to binaries is the next step.
+- Engine manifests pin files by content; OS-level code signing (Apple codesign, Authenticode, IMA) is not consulted, so a signed manifest is the only chain from the policy pin to the bytes that run.
 - Chat template rendering is left to the agent. `llama-server` exposes `/apply-template`; a helper may be added once the prompt format policy is settled.
 - `Token.id` is `None` when a streaming chunk carries more than one token id.
 - The host does not yet feed `llama-server`'s stderr into the audit log; it is traced at `debug` level.

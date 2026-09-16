@@ -47,7 +47,7 @@ This demo walks through a 3-step sequence (echo, add, and jailbreak blocking) sh
 
 ## 2. CLI Usage
 
-The `lumen` binary provides 7 subcommands: `init`, `verify-model`, `sbom`, `defend`, `prove`, `run`, and `verifier`.
+The `lumen` binary provides 11 subcommands: `init`, `keygen`, `sign-model`, `sign-engine`, `verify-model`, `verify-engine`, `sbom`, `defend`, `prove`, `run`, and `verifier`.
 
 ### `init`
 
@@ -73,9 +73,43 @@ Compares a manifest against an actual file and verifies the BLAKE3 hash and Ed25
 $ cargo run -p lumen-cli -- verify-model --manifest model.toml --file model.safetensors
 ```
 
+### `keygen`
+
+Generates an Ed25519 signing key for model and engine manifests. The seed is written as hex to a new `0600` file (never overwriting an existing one) and the public key is printed for `trusted_signers`.
+
+```bash
+$ cargo run -p lumen-cli -- keygen --out /etc/lumen/signing.key
+```
+
+### `sign-model`
+
+Re-hashes the model file against the manifest and then signs the manifest with the key file. A manifest whose hash does not match the weights is never signed.
+
+```bash
+$ cargo run -p lumen-cli -- sign-model --manifest model.toml --key /etc/lumen/signing.key --out model_signed.toml
+```
+
+### `sign-engine`
+
+Hashes an engine executable and every shared library it loads, then emits a signed `EngineManifest`. Pass each library with `--file`; a dynamically linked build that pins only the launcher is not pinned at all.
+
+```bash
+$ cargo run -p lumen-cli -- sign-engine --name llama-server --version b10603 \
+    --binary /opt/llama.cpp/llama-server --file /opt/llama.cpp/lib/libllama.so \
+    --key /etc/lumen/signing.key --out engine.toml
+```
+
+### `verify-engine`
+
+Verifies an engine manifest: the signature against the given trusted signers first, then that every pinned file is a regular, non-world-writable file with the pinned BLAKE3. With at least one `--trusted-signer`, an unsigned manifest is rejected.
+
+```bash
+$ cargo run -p lumen-cli -- verify-engine --manifest engine.toml --trusted-signer <PUBKEY_HEX>
+```
+
 ### `sbom`
 
-Outputs a CycloneDX 1.5 SBOM as JSON from the list of models declared in a policy file.
+Outputs a CycloneDX 1.5 SBOM as JSON from the models and engines declared in a policy file. Engines appear as `application` components with the executable hash followed by each pinned library hash.
 
 ```bash
 $ cargo run -p lumen-cli -- sbom --policy policies/default.toml
@@ -91,7 +125,7 @@ $ cargo run -p lumen-cli -- prove --prompt "echo hi" --tool echo --circuit-id lu
 
 ### `run`
 
-Executes one agent step while enforcing the BLAKE3 pin of the policy file. If `--policy-hash` does not match the actual BLAKE3 of the policy file, the request is immediately rejected; this is the core of Lumen's Zero-Trust UX. If a model manifest is declared in the policy file, the `verify_model` step must pass first. The inference backend is chosen by the policy file's `[inference]` section (`dummy` by default, or `llama-server`), and its parameters, including the engine binary hash, are pinned together with the policy. After that, the host side performs capability issuance, defense analysis, inference, policy verification, tool execution, ZKP generation, and self-verify in one shot.
+Executes one agent step while enforcing the BLAKE3 pin of the policy file. If `--policy-hash` does not match the actual BLAKE3 of the policy file, the request is immediately rejected; this is the core of Lumen's Zero-Trust UX. If model or engine manifests are declared in the policy file, they are verified first against `trusted_signers` (signature, then every pinned file); once `trusted_signers` is set, unsigned manifests are rejected. The inference backend is chosen by the policy file's `[inference]` section (`dummy` by default, or `llama-server`), and its parameters, including the engine manifest reference, are pinned together with the policy. After that, the host side performs capability issuance, defense analysis, inference, policy verification, tool execution, ZKP generation, and self-verify in one shot.
 
 ```bash
 $ cargo run -p lumen-cli -- run --policy policies/default.toml --policy-hash <BLAKE3HEX> --prompt "echo hello"
@@ -181,7 +215,7 @@ $ ./scripts/vendor.sh --check  # verify vendor/ matches Cargo.lock (offline)
 
 `MockCommitmentProver` is a BLAKE3 commitment, not a ZKP (`Verification::CommitmentOnly` and `Verification::ZkVerified` are separated at the type level, making confusion impossible by construction). The halo2 circuit shipped in v0.3 was removed in v0.5 because its MockProver verification gave no ZK guarantee; a succinct backend (SP1, RISC Zero, or similar) will be chosen at the next milestone review, so `ZkVerified` is currently unreachable.
 
-The `ezkl` backend is a feature stub. `DummyEngine` only recognizes echo and add patterns. `LlamaServerEngine` (the `llama-server` feature) runs llama.cpp as a separate, BLAKE3-pinned process and binds the served model to a `VerifiedModelHandle` via `/props`; all model files remain subject to mandatory BLAKE3 + optional Ed25519 verification via `VerifiedModelLoader`. The engine binary itself is hash-pinned but not yet signature-verified.
+The `ezkl` backend is a feature stub. `DummyEngine` only recognizes echo and add patterns. `LlamaServerEngine` (the `llama-server` feature) runs llama.cpp as a separate, BLAKE3-pinned process and binds the served model to a `VerifiedModelHandle` via `/props`; all model files remain subject to mandatory BLAKE3 + optional Ed25519 verification via `VerifiedModelLoader`. The engine binary and its shared libraries are pinned by a signed `EngineManifest`; OS-level code signatures are not consulted.
 
 The EVM Solidity contract in `lumen-onchain` performs constraint rechecking; an upgrade to succinct proof verification will follow the ZK backend decision.
 

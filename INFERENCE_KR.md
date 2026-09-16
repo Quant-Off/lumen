@@ -87,7 +87,7 @@ flowchart LR
 
 | 자산 또는 채널 | 통제 | 위치 |
 |---|---|---|
-| 엔진 바이너리 | `spawn` 전 BLAKE3 핀 검사. 일반 파일이 아니면 거부 | `llama::process::verify_binary` |
+| 엔진 바이너리와 공유 라이브러리 | `EngineManifest`: 이름·버전·해시 집합 전체에 대한 Ed25519 서명을 파일을 열기 전에 `trusted_signers` 로 검증. 핀된 파일은 모두 일반 파일이고 world-writable 이 아니며 BLAKE3 가 일치해야 함. 핀은 `spawn` 직전에 다시 검사 | `lumen_provenance::verify_engine`, `llama::process` |
 | 모델 가중치 | `VerifiedModelLoader` (BLAKE3 + 선택적 Ed25519). 엔진은 `VerifiedModelHandle` 만 받음 | `loader` |
 | 서빙 모델 = 검증 모델 | `/props.model_path` 를 정규화해 핸들과 비교. 필드 없으면 거부 | `LlamaServerEngine::from_config` |
 | 요청 인증 | 프로세스별 난수 API 키를 `LLAMA_API_KEY` 로 전달 (argv 금지), `Authorization: Bearer` 로 송신 | `process`, `llama` |
@@ -96,7 +96,24 @@ flowchart LR
 | 응답 처리 | 헤더 16 KiB, 바디 64 MiB, SSE 이벤트 4 MiB 상한, chunked 프레이밍 검증, 요청·유휴 타임아웃 | `http`, `llama` |
 | 웹 표면 | `--no-webui`, metrics / slots 엔드포인트 미활성 | `process` |
 | 도구 선택 | 등록 도구 ID 를 열거하는 GBNF 문법. 파서가 ID 와 JSON 형태를 재검증하고 args 를 키 순서로 재직렬화한 뒤 해시 | `toolcall` |
-| 메모리 내 비밀 | API 키는 `Zeroizing<String>` 으로 보관 | `llama` |
+| 메모리 내 비밀 | API 키와 서명 키 시드는 `Zeroizing` 버퍼 으로 보관 | `llama`, `lumen keygen` |
+
+### 엔진 매니페스트
+
+엔진도 모델과 같은 방식으로 기술합니다. 실행 파일과 그것이 로드하는 공유 라이브러리 전부를 핀한 서명된 매니페스트입니다.
+
+```toml
+[[engines]]
+name      = "llama-server"
+version   = "b10603"
+path      = "/opt/llama.cpp/llama-server"
+hash      = "<실행 파일의 blake3>"
+files     = [{ path = "/opt/llama.cpp/lib/libllama.so", hash = "<blake3>" }]
+signature = "<본문에 대한 ed25519>"
+signer    = "<서명자 공개 키>"
+```
+
+서명은 `name`, `version`, `hash`, `(파일 이름, 해시)` 목록, `license` 를 덮고 경로는 덮지 않으므로 배포 위치를 옮겨도 유효합니다. 검증은 fail-fast 이며 저렴합니다. 파일을 열기 전에 서명 (마이크로초) 을 먼저 검사하고, 파일마다 종류와 권한을 확인한 뒤 한 번만 해시합니다. `trusted_signers` 가 비어있지 않으면 미서명 매니페스트와 집합 밖 서명자는 거부되고, 신뢰 서명자가 없을 때만 해시 전용 매니페스트가 경고와 함께 통과합니다. `lumen keygen`, `lumen sign-engine`, `lumen verify-engine` 이 이 매니페스트를 만들고 검사하며, `lumen sign-model` 은 같은 키로 모델 매니페스트에 서명합니다. 두 종류는 서로 다른 도메인 분리 prefix 를 쓰므로 모델 서명을 엔진 서명으로 재사용할 수 없습니다.
 
 이 설계가 **주장하지 않는 것**: 호스트 프로세스는 `llama-server` 의 메모리를 attest 할 수 없습니다. 그것은 TEE 의 역할입니다. 평문 HTTP 는 소켓이 호스트를 벗어나지 않기 때문에만 허용되며, 원격 엔진은 반드시 `SecureChannel` peer 뒤에 두어야 합니다. 운영자는 추가로 플랫폼의 OS 샌드박스 (seccomp/Landlock, sandbox-exec, 전용 VM) 로 `llama-server` 를 가두는 것을 권장합니다.
 
@@ -124,14 +141,24 @@ Lumen 이 증명하는 것은 *라우팅 결정* 이지 생성이 아닙니다. 
 ## 7. 정책 파일 설정
 
 ```toml
+trusted_signers = ["<서명자 공개 키 hex>"]   # 설정하면 모델과 엔진 모두 서명 필수
+
+[[engines]]
+name = "llama-server"
+version = "b10603"
+path = "/opt/llama.cpp/llama-server"
+hash = "<바이너리의 BLAKE3 hex>"
+files = [{ path = "/opt/llama.cpp/lib/libllama.so", hash = "<blake3>" }]
+signature = "<hex>"
+signer = "<서명자 공개 키 hex>"
+
 [inference]
 backend = "llama-server"
 
 [inference.params]
 mode        = "spawn"                       # 또는 "attach"
 endpoint    = "unix:/run/lumen/llama.sock"  # 또는 "tcp:127.0.0.1:8080"
-binary      = "/opt/llama.cpp/llama-server"
-binary_hash = "<바이너리의 BLAKE3 hex>"
+binary      = "llama-server"                # [[engines]] 의 name, 또는 경로 + binary_hash
 model       = "qwen2.5-1.5b"                # [[models]] 의 name, 또는 GGUF 경로 + model_hash
 n_ctx       = "4096"
 gpu_layers  = "99"
@@ -143,7 +170,7 @@ parallel    = "1"
 | `mode` | 공통 | `spawn` 또는 `attach` |
 | `endpoint` | 공통 | `unix:<path.sock>` 또는 `tcp:<loopback ip>:<port>` |
 | `model`, `model_hash`, `model_name`, `model_version` | 공통 | GGUF 경로 + BLAKE3. `model` 이 `[[models]]` 항목 이름이면 CLI 가 매니페스트의 경로·해시·이름·버전으로 치환 |
-| `binary`, `binary_hash` | spawn | 엔진 바이너리와 BLAKE3 핀 |
+| `binary`, `binary_hash`, `binary_files` | spawn | 엔진 바이너리, BLAKE3 핀, 공유 라이브러리 핀의 JSON 배열 (`{path, hash}`). `binary` 가 `[[engines]]` 항목 이름이면 CLI 가 그 매니페스트를 검증 (서명 -> 파일 전부) 한 뒤 셋 모두 치환 |
 | `n_ctx`, `threads`, `gpu_layers`, `parallel`, `extra_args`, `startup_timeout_secs` | spawn | `llama-server` 에 전달 (`-c`, `-t`, `-ngl`, `--parallel`). 예약 인자는 거부 |
 | `api_key_file` | attach | 서버 API 키가 든 파일 (0600 권장) |
 | `request_timeout_secs`, `cache_prompt`, `grammar` | 공통 | 클라이언트 동작. `grammar` 는 보통 CLI 가 주입 |
@@ -176,7 +203,7 @@ peer -> client : InferFrame::Token(Token)*  이후  InferFrame::Done(Completion)
 
 ## 10. 알려진 공백과 로드맵
 
-- 엔진 바이너리는 해시 핀만 되고 서명 검증은 없습니다. `ModelManifest` (Ed25519) 를 바이너리로 확장하는 것이 다음 단계입니다.
+- 엔진 매니페스트는 파일 내용을 핀할 뿐 OS 코드 서명 (Apple codesign, Authenticode, IMA) 은 참조하지 않으므로, 정책 핀에서 실행되는 바이트까지의 유일한 체인은 서명된 매니페스트입니다.
 - 채팅 템플릿 렌더링은 에이전트 몫입니다. `llama-server` 의 `/apply-template` 을 감싸는 헬퍼는 프롬프트 형식 정책이 정해지면 추가할 수 있습니다.
 - 스트리밍 청크가 토큰 ID 를 둘 이상 담으면 `Token.id` 는 `None` 입니다.
 - 호스트는 아직 `llama-server` 의 stderr 를 감사 로그에 넣지 않고 `debug` 레벨로 trace 합니다.

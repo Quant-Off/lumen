@@ -6,7 +6,7 @@
 
 Lumen is a high-security, verifiable Rust AI agent framework for zero-trust and air-gapped environments. It combines permission control (WASM sandbox) with result verification (zkML) to enable safe, autonomous AI operation that meets the strict security standards required by government-grade deployments.
 
-Every model, policy file and inference engine binary is pinned by a BLAKE3 hash before it is used. Agents run inside a wasmtime sandbox and reach tools only through Ed25519-signed capabilities. Tool routing decisions are bound to a commitment that can later be verified. All third-party sources are vendored, so the whole workspace builds offline.
+Every model, policy file and inference engine binary is pinned by a BLAKE3 hash before it is used, and model and engine manifests carry Ed25519 signatures checked against the policy's trusted signers. Agents run inside a wasmtime sandbox and reach tools only through Ed25519-signed capabilities. Tool routing decisions are bound to a commitment that can later be verified. All third-party sources are vendored, so the whole workspace builds offline.
 
 ## Documentation
 

@@ -64,22 +64,39 @@ The verified combination is llama.cpp b10603 (macOS arm64, Metal) with Qwen3.8-2
 
 ## 2. Preparing the Engine Binary
 
-Lumen refuses to start an engine whose BLAKE3 hash does not match the pin, so hash it once on a trusted machine:
+Lumen refuses to start an engine that does not match its pinned manifest, and the manifest is signed so that nobody who can edit the policy file can approve a different binary. Do this once on a trusted machine.
+
+### 2-1. Signing key
 
 ```bash
-$ b3sum build/bin/llama-server
-# 3f2a...  build/bin/llama-server
+$ lumen keygen --out /etc/lumen/signing.key      # written 0600, never overwritten
+# public key: 2a7e57c2...
 ```
 
-Or with Lumen's own primitive:
+The public key goes into `trusted_signers` in the policy file. Keep the key file off the runtime host; only the public key travels with the policy.
 
-```rust
-use lumen_core::Blake3Hash;
-let hash = Blake3Hash::of_file(std::path::Path::new("/opt/llama.cpp/llama-server"))?;
-println!("{hash}");
+### 2-2. Sign the engine
+
+List the executable and every shared library it loads (`ldd`, `otool -L`). A dynamically linked build that pins only the launcher is not pinned at all.
+
+```bash
+$ lumen sign-engine --name llama-server --version b10603 \
+    --binary /opt/llama.cpp/llama-server \
+    --file /opt/llama.cpp/lib/libllama.so --file /opt/llama.cpp/lib/libggml.so \
+    --license MIT --key /etc/lumen/signing.key --out engine.toml
+# engine llama-server vb10603  hash=3f2a...  files=2  signer=2a7e57c2...
 ```
 
-Keep the binary read-only and owned by a dedicated user. The hash goes into the policy file (`binary_hash`) or into `SpawnSpec::binary_hash`.
+The manifest pins each file by BLAKE3 and carries a detached Ed25519 signature over the name, version and hash set. Paths are not signed, so the same manifest works after the files are moved.
+
+### 2-3. Verify on the runtime host
+
+```bash
+$ lumen verify-engine --manifest engine.toml --trusted-signer 2a7e57c2...
+# OK  llama-server vb10603  hash=3f2a...  files=2  size=18542432 bytes  signer=2a7e57c2...
+```
+
+Verification checks the signature before opening any file, then requires every file to be a regular, non-world-writable file with the pinned hash. Keep the files read-only and owned by a dedicated user. Paste the manifest into the policy file as an `[[engines]]` entry (section 4), or use `SpawnSpec::from_engine` with the result of `lumen_provenance::verify_engine` in code.
 
 ---
 
@@ -115,6 +132,14 @@ hash    = "a1b2c3..."   # 64 hex chars
 $ cargo run -p lumen-cli -- verify-model --manifest model.toml --file models/qwen2.5-1.5b-q8.gguf
 ```
 
+Sign it with the same key as the engine. `sign-model` re-hashes the file before signing, so it never signs a manifest whose hash does not match the weights.
+
+```bash
+$ lumen sign-model --manifest model.toml --key /etc/lumen/signing.key --out model_signed.toml
+```
+
+Once `trusted_signers` is set in the policy file, unsigned model and engine manifests are rejected.
+
 ---
 
 ## 4. Route A: Policy File and `lumen run`
@@ -122,12 +147,25 @@ $ cargo run -p lumen-cli -- verify-model --manifest model.toml --file models/qwe
 The simplest production path is to declare everything in the pinned policy file. `lumen init` prints a template; the relevant part:
 
 ```toml
+trusted_signers = ["2a7e57c2..."]   # from `lumen keygen`
+
 [[models]]
-name    = "qwen2.5-1.5b"
-version = "1.0"
-path    = "models/qwen2.5-1.5b-q8.gguf"
-format  = "Gguf"
-hash    = "a1b2c3..."
+name      = "qwen2.5-1.5b"
+version   = "1.0"
+path      = "models/qwen2.5-1.5b-q8.gguf"
+format    = "Gguf"
+hash      = "a1b2c3..."
+signature = "..."                   # from `lumen sign-model`
+signer    = "2a7e57c2..."
+
+[[engines]]
+name      = "llama-server"
+version   = "b10603"
+path      = "/opt/llama.cpp/llama-server"
+hash      = "3f2a..."
+files     = [{ path = "/opt/llama.cpp/lib/libllama.so", hash = "..." }]
+signature = "..."                   # from `lumen sign-engine`
+signer    = "2a7e57c2..."
 
 [inference]
 backend = "llama-server"
@@ -135,9 +173,8 @@ backend = "llama-server"
 [inference.params]
 mode        = "spawn"
 endpoint    = "unix:/run/lumen/llama.sock"
-binary      = "/opt/llama.cpp/llama-server"
-binary_hash = "3f2a..."
-model       = "qwen2.5-1.5b"     # refers to the [[models]] entry above
+binary      = "llama-server"     # points at the [[engines]] entry above
+model       = "qwen2.5-1.5b"     # points at the [[models]] entry above
 n_ctx       = "4096"
 gpu_layers  = "99"
 parallel    = "1"
@@ -156,9 +193,10 @@ What happens in order:
 
 1. The policy file's BLAKE3 is checked against `--policy-hash`.
 2. Every `[[models]]` manifest is verified.
-3. The engine binary hash is checked, `llama-server` is spawned with a fresh API key on the Unix socket, `/health` is polled, and `/props.model_path` is compared with the verified model path.
-4. A GBNF grammar is generated from the registered tools (`echo`, `add`) and attached to every completion.
-5. The step runs: defense, inference, policy check, tool execution, routing commitment.
+3. Every `[[engines]]` manifest is verified: signature against `trusted_signers` first, then every pinned file. The verified paths and hashes are substituted into the backend parameters.
+4. The binary and library pins are re-checked, `llama-server` is spawned with a fresh API key on the Unix socket, `/health` is polled, and `/props.model_path` is compared with the verified model path.
+5. A GBNF grammar is generated from the registered tools (`echo`, `add`) and attached to every completion.
+6. The step runs: defense, inference, policy check, tool execution, routing commitment.
 
 To attach to a server that is already running (for example one managed by systemd inside the TEE):
 
@@ -180,10 +218,10 @@ model        = "qwen2.5-1.5b"           # still bound via /props.model_path
 use std::path::Path;
 use std::sync::Arc;
 
-use lumen_core::Blake3Hash;
+use lumen_core::VerifyingKey;
 use lumen_inference::llama::{Endpoint, LlamaServerConfig, LlamaServerEngine, SpawnSpec};
 use lumen_inference::{InferenceEngine, SamplingParams, VerifiedModelLoader};
-use lumen_provenance::ModelManifest;
+use lumen_provenance::{verify_engine, EngineManifest, ModelManifest};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -191,11 +229,12 @@ async fn main() -> anyhow::Result<()> {
     let manifest: ModelManifest = toml::from_str(&std::fs::read_to_string("model.toml")?)?;
     let handle = VerifiedModelLoader::hash_only().load(manifest.path.as_path(), &manifest)?;
 
-    // 2. Pinned engine binary.
-    let binary_hash: Blake3Hash = "3f2a...".parse()?;
-    let mut spec = SpawnSpec::new(
-        "/opt/llama.cpp/llama-server",
-        binary_hash,
+    // 2. Signed engine manifest: signature -> file type and permissions -> hashes.
+    let engine: EngineManifest = toml::from_str(&std::fs::read_to_string("engine.toml")?)?;
+    let trusted = [VerifyingKey::from_bytes(&<[u8; 32]>::try_from(hex::decode("2a7e57c2...")?)?)?];
+    let verified = verify_engine(Path::new("."), &engine, &trusted)?;
+    let mut spec = SpawnSpec::from_engine(
+        &verified,
         handle,
         Endpoint::Unix("/run/lumen/llama.sock".into()),
     );

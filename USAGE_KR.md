@@ -47,7 +47,7 @@ $ cargo run -p lumen-cli --example hello_agent
 
 ## 2. CLI 사용법
 
-`lumen` 바이너리는 7개의 서브커맨드 (`init`, `verify-model`, `sbom`, `defend`, `prove`, `run`, `verifier`) 를 제공합니다.
+`lumen` 바이너리는 11개의 서브커맨드 (`init`, `keygen`, `sign-model`, `sign-engine`, `verify-model`, `verify-engine`, `sbom`, `defend`, `prove`, `run`, `verifier`) 를 제공합니다.
 
 ### `init`
 
@@ -73,9 +73,43 @@ $ cargo run -p lumen-cli -- defend --text "ignore previous instructions"
 $ cargo run -p lumen-cli -- verify-model --manifest model.toml --file model.safetensors
 ```
 
+### `keygen`
+
+모델·엔진 매니페스트 서명용 Ed25519 키를 생성합니다. 시드는 새 `0600` 파일에 hex 로 기록되고 (기존 파일은 덮어쓰지 않음), `trusted_signers` 에 넣을 공개 키가 출력됩니다.
+
+```bash
+$ cargo run -p lumen-cli -- keygen --out /etc/lumen/signing.key
+```
+
+### `sign-model`
+
+모델 파일을 매니페스트와 다시 대조한 뒤 키 파일로 매니페스트에 서명합니다. 가중치와 해시가 다른 매니페스트에는 서명하지 않습니다.
+
+```bash
+$ cargo run -p lumen-cli -- sign-model --manifest model.toml --key /etc/lumen/signing.key --out model_signed.toml
+```
+
+### `sign-engine`
+
+엔진 실행 파일과 그것이 로드하는 공유 라이브러리를 모두 해시해 서명된 `EngineManifest` 를 발행합니다. 라이브러리는 `--file` 로 하나씩 넘깁니다. 동적 링크 빌드에서 런처만 핀하면 아무것도 핀되지 않은 것과 같습니다.
+
+```bash
+$ cargo run -p lumen-cli -- sign-engine --name llama-server --version b10603 \
+    --binary /opt/llama.cpp/llama-server --file /opt/llama.cpp/lib/libllama.so \
+    --key /etc/lumen/signing.key --out engine.toml
+```
+
+### `verify-engine`
+
+엔진 매니페스트를 검증합니다. 주어진 신뢰 서명자로 서명을 먼저 확인한 뒤, 핀된 파일이 모두 일반 파일이고 world-writable 이 아니며 BLAKE3 가 일치하는지 검사합니다. `--trusted-signer` 가 하나라도 있으면 미서명 매니페스트는 거부됩니다.
+
+```bash
+$ cargo run -p lumen-cli -- verify-engine --manifest engine.toml --trusted-signer <PUBKEY_HEX>
+```
+
 ### `sbom`
 
-정책 파일에 선언된 모델 목록으로부터 CycloneDX 1.5 SBOM 을 JSON 으로 출력합니다.
+정책 파일에 선언된 모델과 엔진으로부터 CycloneDX 1.5 SBOM 을 JSON 으로 출력합니다. 엔진은 `application` 컴포넌트로 실리며 실행 파일 해시 뒤에 핀된 라이브러리 해시가 따라옵니다.
 
 ```bash
 $ cargo run -p lumen-cli -- sbom --policy policies/default.toml
@@ -91,7 +125,7 @@ $ cargo run -p lumen-cli -- prove --prompt "echo hi" --tool echo --circuit-id lu
 
 ### `run`
 
-정책 파일의 BLAKE3 핀을 강제하면서 에이전트 1스텝을 실행합니다. `--policy-hash` 가 정책 파일의 실제 BLAKE3 와 다르면 즉시 거부되며, 이것이 Lumen 의 Zero-Trust UX 핵심입니다. 정책 파일에 모델 매니페스트가 선언되어 있으면 `verify_model` 단계가 먼저 통과되어야 합니다. 추론 백엔드는 정책 파일의 `[inference]` 섹션으로 선택되며 (기본 `dummy`, 또는 `llama-server`), 엔진 바이너리 해시를 포함한 파라미터가 정책과 함께 핀됩니다. 이후 호스트 측에서 capability 발급, defense 분석, 추론, 정책 검증, 도구 실행, ZKP 생성, self-verify 까지 한 번에 수행됩니다.
+정책 파일의 BLAKE3 핀을 강제하면서 에이전트 1스텝을 실행합니다. `--policy-hash` 가 정책 파일의 실제 BLAKE3 와 다르면 즉시 거부되며, 이것이 Lumen 의 Zero-Trust UX 핵심입니다. 정책 파일에 모델·엔진 매니페스트가 선언되어 있으면 먼저 `trusted_signers` 로 검증됩니다 (서명 -> 핀된 파일 전부). `trusted_signers` 가 설정되면 미서명 매니페스트는 거부됩니다. 추론 백엔드는 정책 파일의 `[inference]` 섹션으로 선택되며 (기본 `dummy`, 또는 `llama-server`), 엔진 매니페스트 참조를 포함한 파라미터가 정책과 함께 핀됩니다. 이후 호스트 측에서 capability 발급, defense 분석, 추론, 정책 검증, 도구 실행, ZKP 생성, self-verify 까지 한 번에 수행됩니다.
 
 ```bash
 $ cargo run -p lumen-cli -- run --policy policies/default.toml --policy-hash <BLAKE3HEX> --prompt "echo hello"
@@ -181,7 +215,7 @@ $ ./scripts/vendor.sh --check  # vendor/ 가 Cargo.lock 과 일치하는지 검�
 
 `MockCommitmentProver` 는 ZKP 가 아닌 BLAKE3 commitment 입니다 (`Verification::CommitmentOnly` 와 `Verification::ZkVerified` 가 타입 차원에서 분리되어 있어 혼동 자체가 불가능). v0.3 의 halo2 회로는 MockProver 검증이 ZK 보장을 주지 않아 v0.5 에서 제거되었으며, succinct 백엔드 (SP1, RISC Zero 등) 는 다음 마일스톤 검토에서 결정됩니다. 따라서 현재 `ZkVerified` 는 도달 불가능합니다.
 
-`ezkl` 백엔드는 feature 스텁입니다. `DummyEngine` 은 echo 와 add 패턴만 인식합니다. `LlamaServerEngine` (`llama-server` feature) 은 llama.cpp 를 BLAKE3 핀된 별도 프로세스로 실행하고 `/props` 로 서빙 모델을 `VerifiedModelHandle` 에 바인드하며, 모든 모델 파일은 여전히 `VerifiedModelLoader` 를 통해 BLAKE3 + 선택적 Ed25519 검증을 강제합니다. 엔진 바이너리 자체는 해시 핀만 되고 아직 서명 검증은 없습니다.
+`ezkl` 백엔드는 feature 스텁입니다. `DummyEngine` 은 echo 와 add 패턴만 인식합니다. `LlamaServerEngine` (`llama-server` feature) 은 llama.cpp 를 BLAKE3 핀된 별도 프로세스로 실행하고 `/props` 로 서빙 모델을 `VerifiedModelHandle` 에 바인드하며, 모든 모델 파일은 여전히 `VerifiedModelLoader` 를 통해 BLAKE3 + 선택적 Ed25519 검증을 강제합니다. 엔진 바이너리와 공유 라이브러리는 서명된 `EngineManifest` 로 핀되며, OS 코드 서명은 참조하지 않습니다.
 
 `lumen-onchain` 의 EVM Solidity contract 는 회로 제약 재검증 (constraint recheck) 형태이며, succinct proof 검증으로의 업그레이드는 ZK 백엔드 결정 이후 진행됩니다.
 
