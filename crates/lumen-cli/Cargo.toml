@@ -36,3 +36,4 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 anyhow.workspace = true
 hex.workspace = true
+zeroize = { workspace = true, features = ["alloc"] }

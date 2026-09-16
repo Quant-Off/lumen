@@ -1,4 +1,4 @@
-//! `lumen sbom` - 정책 파일의 모델로부터 `CycloneDX` SBOM 을 stdout 으로 발행.
+//! `lumen sbom` - 정책 파일의 모델과 엔진으로부터 `CycloneDX` SBOM 을 stdout 으로 발행.
 
 use std::path::PathBuf;
 
@@ -17,7 +17,7 @@ pub struct Args {
 /// 실행.
 pub fn run(args: Args) -> anyhow::Result<()> {
     let (policy, _hash) = PolicyFile::load(&args.policy)?;
-    let doc = lumen_provenance::generate_sbom(&policy.models)?;
+    let doc = lumen_provenance::generate_sbom_with_engines(&policy.models, &policy.engines)?;
     println!("{}", serde_json::to_string_pretty(&doc)?);
     Ok(())
 }

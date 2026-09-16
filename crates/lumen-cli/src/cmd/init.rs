@@ -26,8 +26,12 @@ trusted_issuers = []
 # 작성합니다 - `examples/hello_agent.rs` 참고.
 capabilities = []
 
+# 모델·엔진 매니페스트 서명을 검증할 신뢰 서명자 (`lumen keygen` 의 공개 키).
+# 하나라도 넣으면 미서명 매니페스트는 거부됩니다.
+trusted_signers = []
+
 # 모델 매니페스트. Lumen 은 엔진이 바이트에 닿기 전에 BLAKE3 + (옵션)
-# Ed25519 서명을 검증합니다.
+# Ed25519 서명을 검증합니다. `lumen sign-model` 로 signature / signer 를 채웁니다.
 [[models]]
 name = "tiny-demo"
 version = "0.0.1"
@@ -42,13 +46,23 @@ license = "Apache-2.0"
 [inference]
 backend = "dummy"
 
+# 엔진 매니페스트. `lumen sign-engine` 출력을 그대로 붙여 넣습니다. 실행 파일과
+# 공유 라이브러리 전부가 핀되고 서명은 `trusted_signers` 로 검증됩니다.
+# [[engines]]
+# name      = "llama-server"
+# version   = "b10603"
+# path      = "/opt/llama.cpp/llama-server"
+# hash      = "<실행 파일의 BLAKE3 hex>"
+# files     = [{{ path = "/opt/llama.cpp/lib/libllama.so", hash = "<BLAKE3 hex>" }}]
+# signature = "<hex>"
+# signer    = "<서명자 공개 키 hex>"
+
 # [inference]
 # backend = "llama-server"
 # [inference.params]
 # mode        = "spawn"                      # 또는 "attach"
 # endpoint    = "unix:/run/lumen/llama.sock" # 또는 "tcp:127.0.0.1:8080"
-# binary      = "/opt/llama.cpp/llama-server"
-# binary_hash = "<llama-server 바이너리의 BLAKE3 hex>"
+# binary      = "llama-server"               # [[engines]] 의 name 또는 경로 + binary_hash
 # model       = "tiny-demo"                  # [[models]] 의 name 또는 GGUF 경로
 # n_ctx       = "4096"
 # gpu_layers  = "99"

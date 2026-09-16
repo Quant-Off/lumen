@@ -28,6 +28,14 @@ enum Cmd {
     Init(cmd::init::Args),
     /// 모델 파일을 매니페스트와 비교 검증합니다.
     VerifyModel(cmd::verify_model::Args),
+    /// 매니페스트 서명용 Ed25519 키 파일을 생성합니다.
+    Keygen(cmd::keygen::Args),
+    /// 모델 매니페스트의 해시를 파일과 대조한 뒤 서명합니다.
+    SignModel(cmd::sign_model::Args),
+    /// 엔진 실행 파일과 부속 파일을 해시하고 서명한 매니페스트를 발행합니다.
+    SignEngine(cmd::sign_engine::Args),
+    /// 엔진 매니페스트의 서명과 파일 해시를 검증합니다.
+    VerifyEngine(cmd::verify_engine::Args),
     /// 정책 파일의 매니페스트로부터 CycloneDX SBOM 을 발행합니다.
     Sbom(cmd::sbom::Args),
     /// 방어 엔진으로 프롬프트를 분석합니다.
@@ -55,6 +63,10 @@ async fn main() -> anyhow::Result<()> {
     match cli.cmd {
         Cmd::Init(a) => cmd::init::run(a),
         Cmd::VerifyModel(a) => cmd::verify_model::run(a),
+        Cmd::Keygen(a) => cmd::keygen::run(a),
+        Cmd::SignModel(a) => cmd::sign_model::run(a),
+        Cmd::SignEngine(a) => cmd::sign_engine::run(a),
+        Cmd::VerifyEngine(a) => cmd::verify_engine::run(a),
         Cmd::Sbom(a) => cmd::sbom::run(a),
         Cmd::Defend(a) => cmd::defend::run(a),
         Cmd::Prove(a) => cmd::prove::run(a),

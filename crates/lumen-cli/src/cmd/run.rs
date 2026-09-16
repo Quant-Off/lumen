@@ -50,12 +50,30 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         .unwrap_or_else(|| std::path::Path::new("."));
     for manifest in &policy.models {
         let path = PolicyFile::resolve_model_path(policy_dir, manifest);
-        match lumen_provenance::verify_model(&path, manifest, &[]) {
+        match lumen_provenance::verify_model(&path, manifest, &policy.trusted_signers) {
             Ok(info) => println!(
                 "model verified: {} v{} ({:?}, {} bytes)",
                 info.name, info.version, info.format, info.size_bytes
             ),
             Err(e) => anyhow::bail!("model verification failed for {}: {e}", manifest.name),
+        }
+    }
+
+    // 2b. 엔진 매니페스트 검증: 서명 (신뢰 서명자) -> 실행 파일과 부속 파일 해시.
+    //     기동 시 `SpawnSpec` 이 같은 핀을 다시 확인하므로 서명은 여기서 한 번만
+    //     검증합니다.
+    for manifest in &policy.engines {
+        match lumen_provenance::verify_engine(policy_dir, manifest, &policy.trusted_signers) {
+            Ok(e) => println!(
+                "engine verified: {} v{} ({} pinned files, signer: {})",
+                e.name,
+                e.version,
+                e.files.len() + 1,
+                e.signer
+                    .map(|k| k.to_hex())
+                    .unwrap_or_else(|| "none".into())
+            ),
+            Err(err) => anyhow::bail!("engine verification failed for {}: {err}", manifest.name),
         }
     }
 
