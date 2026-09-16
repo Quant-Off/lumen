@@ -52,6 +52,27 @@ impl SigningKey {
         }
     }
 
+    /// hex 인코딩된 32 바이트 시드 (키 파일 내용) 로부터 생성합니다.
+    ///
+    /// 디코딩된 시드는 즉시 zeroize 됩니다. 앞뒤 공백은 무시합니다.
+    ///
+    /// # Errors
+    /// hex 가 아니거나 길이가 32 바이트가 아니면 [`Error::Crypto`].
+    pub fn from_seed_hex(seed_hex: &str) -> Result<Self> {
+        let mut seed = zeroize::Zeroizing::new([0u8; SECRET_KEY_LENGTH]);
+        hex::decode_to_slice(seed_hex.trim(), seed.as_mut_slice())
+            .map_err(|_| Error::Crypto("signing key seed must be 64 hex chars".into()))?;
+        Ok(Self::from_seed(&seed))
+    }
+
+    /// 시드를 hex 로 export 합니다. 키 파일 생성 전용이며 호출은 감사 대상입니다.
+    ///
+    /// 반환값은 drop 시 zeroize 됩니다.
+    pub fn seed_hex(&self) -> zeroize::Zeroizing<String> {
+        let seed = zeroize::Zeroizing::new(self.inner.to_bytes());
+        zeroize::Zeroizing::new(hex::encode(seed.as_slice()))
+    }
+
     /// 공개 검증 키를 도출합니다.
     pub fn verifying_key(&self) -> VerifyingKey {
         VerifyingKey(self.inner.verifying_key())

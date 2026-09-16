@@ -22,7 +22,7 @@ getrandom.workspace = true
 chacha20.workspace = true
 rand_core.workspace = true
 subtle.workspace = true
-zeroize.workspace = true
+zeroize = { workspace = true, features = ["alloc"] }
 hex.workspace = true
 postcard.workspace = true
 
