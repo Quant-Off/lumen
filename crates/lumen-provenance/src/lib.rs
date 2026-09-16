@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod engine;
 pub mod gguf;
 pub mod manifest;
 pub mod onnx;
@@ -20,9 +21,10 @@ use std::path::Path;
 
 use lumen_core::{Blake3Hash, Error, Result, VerifyingKey};
 
+pub use engine::{verify_engine, EngineManifest, PinnedFile, VerifiedEngine};
 pub use manifest::{Format, ModelManifest, SignedManifest};
 pub use pinset::{verify_model_against_pinset, PinAcceptance, PinEntry, PinSet, RetiredPin};
-pub use sbom::{generate_sbom, SbomComponent, SbomDocument};
+pub use sbom::{generate_sbom, generate_sbom_with_engines, SbomComponent, SbomDocument};
 
 /// 검증된 모델에 대해 반환되는 정보.
 #[derive(Clone, Debug, PartialEq, Eq)]

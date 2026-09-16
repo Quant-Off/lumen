@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use lumen_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::engine::EngineManifest;
 use crate::manifest::ModelManifest;
 
 /// CycloneDX 최상위 문서.
@@ -93,8 +94,19 @@ pub struct SbomLicenseId {
     pub id: String,
 }
 
-/// 매니페스트들로부터 CycloneDX SBOM 문서를 빌드합니다.
+/// 모델 매니페스트들로부터 CycloneDX SBOM 문서를 빌드합니다.
 pub fn generate_sbom(manifests: &[ModelManifest]) -> Result<SbomDocument> {
+    generate_sbom_with_engines(manifests, &[])
+}
+
+/// 모델과 엔진 매니페스트로부터 CycloneDX SBOM 문서를 빌드합니다.
+///
+/// 엔진은 `application` 컴포넌트로 실리며 실행 파일 해시 뒤에 부속 파일
+/// 해시가 순서대로 따라옵니다.
+pub fn generate_sbom_with_engines(
+    manifests: &[ModelManifest],
+    engines: &[EngineManifest],
+) -> Result<SbomDocument> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| Error::Provenance(format!("clock: {e}")))?;
@@ -122,6 +134,28 @@ pub fn generate_sbom(manifests: &[ModelManifest]) -> Result<SbomDocument> {
                 })
                 .collect(),
         })
+        .chain(engines.iter().map(|e| {
+            SbomComponent {
+                component_type: "application".into(),
+                bom_ref: format!("engine:{}@{}", e.name, e.version),
+                name: e.name.clone(),
+                version: e.version.clone(),
+                hashes: std::iter::once(e.hash)
+                    .chain(e.files.iter().map(|f| f.hash))
+                    .map(|h| SbomHash {
+                        alg: "BLAKE3".into(),
+                        content: h.to_hex(),
+                    })
+                    .collect(),
+                licenses: e
+                    .license
+                    .iter()
+                    .map(|id| SbomLicense {
+                        license: SbomLicenseId { id: id.clone() },
+                    })
+                    .collect(),
+            }
+        }))
         .collect();
 
     Ok(SbomDocument {
