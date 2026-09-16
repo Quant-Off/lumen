@@ -15,6 +15,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use zeroize::Zeroizing;
 
+use lumen_provenance::{PinnedFile, VerifiedEngine};
+
 use crate::loader::VerifiedModelHandle;
 
 use super::Endpoint;
@@ -26,6 +28,9 @@ pub struct SpawnSpec {
     pub binary: PathBuf,
     /// 바이너리의 BLAKE3 핀. 불일치 시 기동 거부.
     pub binary_hash: Blake3Hash,
+    /// 바이너리가 로드하는 부속 파일 (공유 라이브러리 등) 의 핀. 기동 직전
+    /// 바이너리와 함께 재검증합니다.
+    pub pinned_files: Vec<PinnedFile>,
     /// 검증된 GGUF 모델 핸들.
     pub model: VerifiedModelHandle,
     /// 서버가 바인드할 엔드포인트. UDS 권장.
@@ -55,6 +60,7 @@ impl SpawnSpec {
         Self {
             binary: binary.into(),
             binary_hash,
+            pinned_files: Vec::new(),
             model,
             endpoint,
             n_ctx: 4096,
@@ -64,6 +70,18 @@ impl SpawnSpec {
             extra_args: Vec::new(),
             startup_timeout: Duration::from_secs(120),
         }
+    }
+
+    /// [`lumen_provenance::verify_engine`] 을 통과한 엔진으로부터 생성합니다.
+    /// 실행 파일과 부속 파일 핀이 모두 기동 시 재검증 대상이 됩니다.
+    pub fn from_engine(
+        engine: &VerifiedEngine,
+        model: VerifiedModelHandle,
+        endpoint: Endpoint,
+    ) -> Self {
+        let mut spec = Self::new(engine.path.clone(), engine.hash, model, endpoint);
+        spec.pinned_files = engine.files.clone();
+        spec
     }
 }
 
@@ -107,6 +125,9 @@ impl LlamaServerProcess {
     /// - spawn 실패 -> [`Error::Io`]
     pub fn spawn(spec: &SpawnSpec, api_key: &Zeroizing<String>) -> Result<Self> {
         verify_binary(&spec.binary, &spec.binary_hash)?;
+        for f in &spec.pinned_files {
+            verify_binary(&f.path, &f.hash)?;
+        }
         for a in &spec.extra_args {
             let name = a.split('=').next().unwrap_or(a);
             if RESERVED_ARGS.contains(&name) {
@@ -213,7 +234,7 @@ impl Drop for LlamaServerProcess {
     }
 }
 
-/// 바이너리가 일반 파일이고 BLAKE3 가 핀과 일치하는지 확인합니다.
+/// 바이너리 (또는 부속 파일) 가 일반 파일이고 BLAKE3 가 핀과 일치하는지 확인합니다.
 pub fn verify_binary(path: &Path, expected: &Blake3Hash) -> Result<()> {
     let meta = std::fs::metadata(path)
         .map_err(|e| Error::Provenance(format!("engine binary {path:?}: {e}")))?;
@@ -255,6 +276,45 @@ mod tests {
         let right = Blake3Hash::of_file(&bin).unwrap();
         verify_binary(&bin, &right).unwrap();
         assert!(verify_binary(&dir, &right).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn pinned_file_mismatch_blocks_spawn() {
+        let dir = std::env::temp_dir().join(format!("lumen-llama-pin-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("fake-llama-server");
+        std::fs::write(&bin, b"#!/bin/sh\nexit 0\n").unwrap();
+        let lib = dir.join("libfake.so");
+        std::fs::write(&lib, b"lib").unwrap();
+        let model_path = dir.join("m.gguf");
+        let mut bytes = b"GGUF".to_vec();
+        bytes.extend_from_slice(&3u32.to_le_bytes());
+        bytes.extend_from_slice(&[0u8; 24]);
+        std::fs::write(&model_path, &bytes).unwrap();
+        let model = crate::loader::VerifiedModelLoader::hash_only()
+            .load_hash_only(
+                &model_path,
+                Blake3Hash::of(&bytes),
+                "m",
+                "0",
+                lumen_provenance::Format::Gguf,
+            )
+            .unwrap();
+        let mut spec = SpawnSpec::new(
+            &bin,
+            Blake3Hash::of_file(&bin).unwrap(),
+            model,
+            Endpoint::Unix(dir.join("s.sock")),
+        );
+        spec.pinned_files = vec![PinnedFile {
+            path: lib.clone(),
+            hash: Blake3Hash::of(b"tampered"),
+        }];
+        let key = Zeroizing::new("k".to_owned());
+        let err = LlamaServerProcess::spawn(&spec, &key).unwrap_err();
+        assert!(matches!(err, Error::Provenance(_)), "{err}");
+        assert!(err.to_string().contains("libfake.so"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -241,6 +241,7 @@ impl LlamaServerConfig {
             "model_version",
             "binary",
             "binary_hash",
+            "binary_files",
             "n_ctx",
             "threads",
             "gpu_layers",
@@ -311,6 +312,11 @@ impl LlamaServerConfig {
                 })?;
                 let binary_hash: Blake3Hash = req("binary_hash")?.parse()?;
                 let mut spec = SpawnSpec::new(req("binary")?, binary_hash, model, endpoint);
+                if let Some(json) = get("binary_files") {
+                    spec.pinned_files = serde_json::from_str(json).map_err(|e| {
+                        Error::Invalid(format!("llama-server: `binary_files`: {e}"))
+                    })?;
+                }
                 if let Some(v) = parse_u32("n_ctx")? {
                     spec.n_ctx = v;
                 }
@@ -1166,9 +1172,28 @@ mod tests {
             LaunchMode::Spawn(spec) => {
                 assert_eq!(spec.n_ctx, 8192);
                 assert_eq!(spec.extra_args, vec!["--flash-attn", "--mlock"]);
+                assert!(spec.pinned_files.is_empty());
             }
             _ => panic!("expected spawn"),
         }
+
+        p.insert(
+            "binary_files".into(),
+            format!(
+                r#"[{{"path":"/usr/lib/libllama.so","hash":"{}"}}]"#,
+                Blake3Hash::of(b"lib").to_hex()
+            ),
+        );
+        let cfg = LlamaServerConfig::from_params(&p).unwrap();
+        match cfg.mode {
+            LaunchMode::Spawn(spec) => {
+                assert_eq!(spec.pinned_files.len(), 1);
+                assert_eq!(spec.pinned_files[0].hash, Blake3Hash::of(b"lib"));
+            }
+            _ => panic!("expected spawn"),
+        }
+        p.insert("binary_files".into(), "not json".into());
+        assert!(LlamaServerConfig::from_params(&p).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
